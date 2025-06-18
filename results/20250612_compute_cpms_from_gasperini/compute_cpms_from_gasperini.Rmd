@@ -1,0 +1,125 @@
+---
+title: "Compute gene expression CPMs from Gasperini et al. (2019)"
+output: html_document
+---
+
+# Introduction
+
+This document describes how to compute the count-per-millions (CPMs) expression 
+values from the RDS object of the Gasperini et al. (2019) study, which is 
+available on GEO under the accession number [GSE120861](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE120861).
+
+Unfortunately you need to have `monocle` R package installed to be able to open
+the RDS.
+```{r}
+# Activate the R environment
+if (!requireNamespace("renv", quietly = TRUE)) {
+  install.packages("renv")
+}
+renv::activate()
+
+# Load the monocle package
+suppressPackageStartupMessages(library(monocle))
+
+# Setup the working directory
+# Check if the 'outputs' and 'intermediates' folders exist, if not create them.
+if (!dir.exists("./outputs"))  dir.create("./outputs", recursive = TRUE)
+if (!dir.exists("./intermediates"))  dir.create("./intermediates", recursive = TRUE)
+
+```
+
+## Download the rds object from GEO
+
+We are interested in the RDS object `GSE120861_at_scale_screen.cds.rds.gz` which
+contains the gene expression values.
+
+> ⚠️ **Warning:** The file size is 1.8GB.
+
+```{r}
+gasperini_rds_url = "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE120861&format=file&file=GSE120861%5Fat%5Fscale%5Fscreen%2Ecds%2Erds%2Egz"
+
+gasperini_rds_gz_fnp = "./intermediates/GSE120861_at_scale_screen.cds.rds.gz"
+gasperini_rds_fnp = "./intermediates/GSE120861_at_scale_screen.cds.rds"
+
+# Download the RDS object if it does not exist
+if (!file.exists(gasperini_rds_gz_fnp) && !file.exists(gasperini_rds_fnp)) {
+  message("Downloading GSE120861_at_scale_screen.cds.rds.gz...")
+  download.file(url = gasperini_rds_url,
+                destfile = gasperini_rds_gz_fnp,
+                method = "curl")
+} else {
+  message("File already exists, skipping download.")
+}
+
+```
+
+## Load the RDS and compute count-per-millions(CPMs) expression values.
+
+Unfortunately the `readRDS` function in this case fails because the file is gzipped.
+```{r}
+# Unzipping first
+if (!file.exists(gasperini_rds_fnp)) {
+  message("Unzipping GSE120861_at_scale_screen.cds.rds.gz...")
+  R.utils::gunzip(gasperini_rds_gz_fnp,
+                  remove = TRUE)
+} else {
+  message("File already unzipped, skipping.")
+}
+```
+
+Loading the RDS object into memory.
+```{r}
+gasperini_rds = readRDS(gasperini_rds_fnp)
+```
+
+Inspecting the loaded object.
+```{r}
+gasperini_rds
+```
+
+Extracting the gene expression matrix, compute the average UMIs counts per gene
+and normalize by the total number of UMIs multiply by 1e6 
+to get CPMs.
+
+> ⚠️ **Warning:** GENCODE versioned: March 2017 v26lift37.
+
+```{r}
+# Extract the expression matrix
+gasperini_expression = exprs(gasperini_rds)
+# Compute the average UMIs counts per gene
+average_umi_per_gene = rowMeans(gasperini_expression)
+# Normalize by the total number of UMIs and multiply by 1e6 to get CPMs
+gasperini_cpms = average_umi_per_gene / sum(average_umi_per_gene) * 1e6
+# Save the CPMs to a file
+gasperini_cpms_df = data.frame(gencode_v26lift37_id = names(gasperini_cpms), 
+                                 cpm = gasperini_cpms)
+write.csv(gasperini_cpms_df, 
+          file = "./outputs/gasperini_cpms.csv", 
+          row.names = FALSE,
+          quote = FALSE
+          )
+
+```
+
+## Cleaning up
+```{r}
+# Remove the RDS object to save space
+message("Cleaning up:")
+for (intermediate in c(gasperini_rds_fnp, gasperini_rds_gz_fnp)) {
+  if (file.exists(intermediate) && file.remove(intermediate)) {
+    message("Removed: ", intermediate)
+  }
+}
+
+# Remove the intermediates folder if empty
+if (length(list.files("./intermediates")) == 0) {
+  unlink("./intermediates", recursive = TRUE)
+  message("Removed: ./intermediates")
+} else {
+  message("Not removing ./intermediates, it is not empty.")
+}
+message("Done.")
+```
+
+
+

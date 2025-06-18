@@ -55,3 +55,21 @@ results/process_validation_datasets/K562_DC_TAP_Seq/logs/
 results/process_validation_datasets/WTC11_DC_TAP_Seq/logs/
 seqspec/.DS_Store
 seqspec/.python-version
+
+
+# Ignore renv auto-generated folders and files
+**/renv/library/
+**/renv/staging/
+**/renv/python/
+**/renv/profiles/
+
+# Ignore lock file ONLY if you don’t want reproducibility (not recommended)
+# renv.lock
+
+# Optional: ignore snapshots by user profiles (if not shared)
+**/.Rprofile
+
+# Optional: R temporary and user-specific files
+**/.Rhistory
+**/.RData
+**/.Rproj.user/
