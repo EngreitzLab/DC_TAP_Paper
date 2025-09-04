@@ -97,6 +97,8 @@ rule add_results_wo_positive_controls:
     combined_power_analysis_output_WTC11 = expand("results/process_validation_datasets/WTC11_DC_TAP_Seq/power_analysis/combined_power_analysis_output_es_{es}.tsv", es = [0.02, 0.03, 0.05, 0.10, 0.15, 0.20, 0.25, 0.50])
   output:
     results_wo_pos_controls = "results/formatted_dc_tap_results/results_wo_pos_controls.tsv"
+  params:
+    padj_threshold = config["process_validation_datasets"]["differential_expression"]["padj_threshold"],
   log: "results/formatted_dc_tap_results/logs/add_results_wo_positive_controls.log"
   conda:
     "../envs/sceptre_dev_for_CIs.yml"
@@ -105,6 +107,48 @@ rule add_results_wo_positive_controls:
     time = "2:00:00"
   script:
     "../scripts/format_dc_tap_results/add_results_wo_positive_controls.R"
+
+# Add the significance results with FDR correction on non-positive controls for validation dataset (Gasperini)
+rule add_results_wo_positive_controls_Gasperini:
+  input:
+    gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories.tsv",
+    combined_power_analysis_output_gasperini = expand("results/main_figure_1_and_2/duplicate_pairs_analysis/power_analysis/combined_power_analysis_output_es_{es}.tsv", es = [0.02, 0.03, 0.05, 0.10, 0.15, 0.20, 0.25, 0.50]),
+  output:
+    results_wo_pos_controls = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv"
+  params:
+    padj_threshold = config["process_validation_datasets"]["differential_expression"]["padj_threshold"],
+  log: "results/formatted_dc_tap_results/logs/add_results_wo_positive_controls_gasperini.log"
+  conda:
+    "../envs/sceptre_dev_for_CIs.yml"
+  resources:
+    mem = "32G",
+    time = "2:00:00"
+  script:
+    "../scripts/format_dc_tap_results/add_results_wo_positive_controls_gasperini.R"
+
+# Add the significance results with FDR correction on non-positive controls for other validation datasets
+datasets = ["Klann", "Morrisv1", "Morrisv2", "Xie"]
+rule add_results_wo_positive_controls_other_validation_datasets:
+  input:
+    expand("results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_{sample}.tsv", sample = datasets)
+
+# FDR correction on non-positive controls for one validation dataset
+rule add_results_wo_positive_controls_validation_dataset:
+  input:
+    validation_dataset_power_analysis_results = lambda w: f"resources/main_figure_3/ENCODE_{w.sample}_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
+    combined_power_analysis_output_validation_dataset = (lambda w: expand("resources/main_figure_3/{sample}/power_analysis/combined_power_analysis_output_es_{es}.tsv", sample = [w.sample], es = [0.02, 0.03, 0.05, 0.10, 0.15, 0.20, 0.25, 0.50]))
+  output:
+    results_wo_pos_controls = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_{sample}.tsv"
+  params:
+    padj_threshold = config["process_validation_datasets"]["differential_expression"]["padj_threshold"],
+  log: "results/formatted_dc_tap_results/logs/add_results_wo_positive_controls_other_validation_{sample}.log"
+  conda:
+    "../envs/sceptre_dev_for_CIs.yml"
+  resources:
+    mem = "32G",
+    time = "2:00:00"
+  script:
+    "../scripts/format_dc_tap_results/add_results_wo_positive_controls_other_validation_datasets.R"
 
 # Resize the elements to 500bp and merge overlapping elements for compatibility with chromatin category overlap pipeline
 rule resize_and_merge_dc_tap_elements_for_chromatin_categories:

@@ -36,12 +36,12 @@ rule effect_size_plots_FDR_wo_pos_controls:
 # Effect sizes of significant hits in different perturb-seq screens
 rule compare_effect_sizes_to_other_screens_FDR_wo_pos_controls:
   input:
-    gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories.tsv",
+    gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv",
     dc_tap_results = "results/formatted_dc_tap_results/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements.tsv",
-    klann = "resources/main_figure_3/ENCODE_Klann_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
-    morrisv1 = "resources/main_figure_3/ENCODE_Morrisv1_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
-    morrisv2 = "resources/main_figure_3/ENCODE_Morrisv2_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
-    xie = "resources/main_figure_3/ENCODE_Xie_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz"
+    klann = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Klann.tsv",
+    morrisv1 = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Morrisv1.tsv",
+    morrisv2 = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Morrisv2.tsv",
+    xie = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Xie.tsv",
   output:
     effect_size_comparison = "results/figures_wo_positive_controls/compare_effect_sizes_to_other_screens/effect_size_comparison.pdf"
   log: "results/figures_wo_positive_controls/logs/compare_effect_sizes_to_other_screens.log"
@@ -56,12 +56,12 @@ rule compare_effect_sizes_to_other_screens_FDR_wo_pos_controls:
 # Comparing power for all the datasets
 rule power_to_detect_change_for_all_datasets_FDR_wo_pos_controls:
   input:
-    gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories.tsv",
+    gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv",
     dc_tap_results = "results/formatted_dc_tap_results/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements.tsv",
-    klann = "resources/main_figure_3/ENCODE_Klann_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
-    morrisv1 = "resources/main_figure_3/ENCODE_Morrisv1_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
-    morrisv2 = "resources/main_figure_3/ENCODE_Morrisv2_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
-    xie = "resources/main_figure_3/ENCODE_Xie_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz"
+    klann = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Klann.tsv",
+    morrisv1 = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Morrisv1.tsv",
+    morrisv2 = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Morrisv2.tsv",
+    xie = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Xie.tsv",
   output:
     power_for_all_datasets_by_proportion = "results/figures_wo_positive_controls/power_to_detect_change_for_all_datasets/power_for_all_datasets_by_proportion.pdf"
   log: "results/figures_wo_positive_controls/logs/power_to_detect_change_for_all_datasets.log"

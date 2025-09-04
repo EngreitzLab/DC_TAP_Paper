@@ -99,10 +99,10 @@ message("Calculating power proportions (wo_pos_controls for DC-TAP only)")
 all_power_props <- dplyr::bind_rows(
   calc_power_props(k562_dc_tap,    "K562",      prefer_wo = TRUE),
   calc_power_props(wtc11_dc_tap,   "WTC11",     prefer_wo = TRUE),
-  calc_power_props(gasperini_results, "Gasperini", prefer_wo = FALSE),
-  calc_power_props(morris,         "Morris",    prefer_wo = FALSE),
-  calc_power_props(klann,          "Klann",     prefer_wo = FALSE),
-  calc_power_props(xie,            "Xie",       prefer_wo = FALSE)
+  calc_power_props(gasperini_results, "Gasperini", prefer_wo = TRUE),
+  calc_power_props(morris,         "Morris",    prefer_wo = TRUE),
+  calc_power_props(klann,          "Klann",     prefer_wo = TRUE),
+  calc_power_props(xie,            "Xie",       prefer_wo = TRUE)
 )
 
 

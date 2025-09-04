@@ -34,11 +34,11 @@ xie <- fread(snakemake@input$xie, sep = "\t")
 ### FORMAT RESUTLS ============================================================
 
 # Filter for significant valid pairs
-klann_filt <- klann %>% filter(ValidConnection == T, Significant, EffectSize < 0)
-morrisv1_filt <- morrisv1 %>% filter(ValidConnection == T, Significant, EffectSize < 0)
-morrisv2_filt <- morrisv2 %>% filter(ValidConnection == T, Significant, EffectSize < 0)
+klann_filt <- klann %>% filter(ValidConnection == T, significant_wo_pos_controls, EffectSize < 0)
+morrisv1_filt <- morrisv1 %>% filter(ValidConnection == T, significant_wo_pos_controls, EffectSize < 0)
+morrisv2_filt <- morrisv2 %>% filter(ValidConnection == T, significant_wo_pos_controls, EffectSize < 0)
 xie_filt <- xie %>% filter(ValidConnection == T, Significant, EffectSize < 0)
-gasperini_filt <- gasperini_results %>% filter(DistalElement_Gene, significant, pct_change_effect_size < 0)
+gasperini_filt <- gasperini_results %>% filter(DistalElement_Gene, significant_wo_pos_controls, pct_change_effect_size < 0)
 k562_dc_tap_filt <- dc_tap_results %>% filter(Random_DistalElement_Gene, significant_wo_pos_controls, pct_change_effect_size < 0, cell_type == "K562")
 wtc11_dc_tap_filt <- dc_tap_results %>% filter(Random_DistalElement_Gene, significant_wo_pos_controls, pct_change_effect_size < 0, cell_type == "WTC11")
 

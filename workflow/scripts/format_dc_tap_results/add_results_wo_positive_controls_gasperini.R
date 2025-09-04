@@ -1,9 +1,9 @@
-# Script: add_results_wo_positive_controls.R
+# Script: add_results_wo_positive_controls_gasperini.R
 
 ### SETUP =====================================================================
 
 # Saving image for debugging
-save.image(paste0("RDA_objects/add_results_wo_positive_controls.rda"))
+save.image(paste0("RDA_objects/add_results_wo_positive_controls_gasperini.rda"))
 message("Saved Image")
 # stop("Manually Stopped Program after Saving Image")
 
@@ -23,28 +23,17 @@ suppressPackageStartupMessages({
 })
 
 message("Loading input files")
-element_gene_pairs <- read_tsv(snakemake@input$results_with_element_gene_pair_categories_modified)
+element_gene_pairs <- read_tsv(snakemake@input$gasperini_results)
 
 # Read in power simulation data for ALL effect sizes
 effect_sizes <- c(2, 3, 5, 10, 15, 20, 25, 50)
 
-# Load K562 power simulations for all effect sizes using map_dfr
-k562_power_simulation <- map_dfr(seq_along(effect_sizes), function(i) {
-  fread(snakemake@input$combined_power_analysis_output_K562[[i]]) %>%
+# Load Gasperini power simulations for all effect sizes using map_dfr
+gasperini_power_simulation <- map_dfr(seq_along(effect_sizes), function(i) {
+  fread(snakemake@input$combined_power_analysis_output_gasperini[[i]]) %>%
     as_tibble() %>%
     mutate(cell_type = "K562", effect_size = effect_sizes[i])
 })
-
-# Load WTC11 power simulations for all effect sizes using map_dfr
-wtc11_power_simulation <- map_dfr(seq_along(effect_sizes), function(i) {
-  fread(snakemake@input$combined_power_analysis_output_WTC11[[i]]) %>%
-    as_tibble() %>%
-    mutate(cell_type = "WTC11", effect_size = effect_sizes[i])
-})
-
-# Combine all power simulations
-combined_power_simulation <- rbind(k562_power_simulation, wtc11_power_simulation)
-
 
 ### CUSTOM FDR CORRECTION WITHOUT POSITIVE CONTROLS ==========================
 
@@ -55,7 +44,7 @@ final_pairs <- element_gene_pairs %>%
   group_by(cell_type) %>%
   mutate(
     # Create a flag for pairs to include in FDR correction
-    include_in_fdr = (selfPromoter == FALSE & Positive_Control_DistalElement_Gene == FALSE & Positive_Control_selfPromoter == FALSE),
+    include_in_fdr = (selfPromoter == FALSE),
     
     # Apply Benjamini-Hochberg correction only to the subset
     sceptre_adj_p_value_wo_pos_controls = ifelse(
@@ -78,18 +67,12 @@ final_pairs <- element_gene_pairs %>%
 message("Recalculating power for wo_pos_controls significance threshold for all effect sizes")
 
 # Get max nominal p-value from wo_pos_controls significant pairs for each cell type
-max_nom_p_val_K562 <- final_pairs %>% 
+max_nom_p_val_gasperini <- final_pairs %>% 
   filter(significant_wo_pos_controls == TRUE, cell_type == "K562") %>% 
   pull(sceptre_p_value) %>% 
   max(na.rm = TRUE)
 
-max_nom_p_val_WTC11 <- final_pairs %>% 
-  filter(significant_wo_pos_controls == TRUE, cell_type == "WTC11") %>% 
-  pull(sceptre_p_value) %>% 
-  max(na.rm = TRUE)
-
-message(paste("Max nominal p-value for K562 wo_pos_controls:", max_nom_p_val_K562))
-message(paste("Max nominal p-value for WTC11 wo_pos_controls:", max_nom_p_val_WTC11))
+message(paste("Max nominal p-value for Gasperini_K562 wo_pos_controls:", max_nom_p_val_gasperini))
 
 # Function to calculate power for a given effect size
 calculate_power_for_effect_size <- function(df, effect_size_val, max_p_val, cell_type_val) {
@@ -103,25 +86,15 @@ calculate_power_for_effect_size <- function(df, effect_size_val, max_p_val, cell
     )
 }
 
-# Calculate power for all effect sizes for K562
-power_wo_pos_controls_K562 <- map(effect_sizes, function(es) {
-  calculate_power_for_effect_size(combined_power_simulation, es, max_nom_p_val_K562, "K562")
+# Calculate power for all effect sizes for Gasperini K562
+power_wo_pos_controls_gasperini <- map(effect_sizes, function(es) {
+  calculate_power_for_effect_size(gasperini_power_simulation, es, max_nom_p_val_gasperini, "K562")
 }) %>%
   reduce(left_join, by = c("grna_target", "response_id")) %>%
   mutate(cell_type = "K562")
 
-# Calculate power for all effect sizes for WTC11
-power_wo_pos_controls_WTC11 <- map(effect_sizes, function(es) {
-  calculate_power_for_effect_size(combined_power_simulation, es, max_nom_p_val_WTC11, "WTC11")
-}) %>%
-  reduce(left_join, by = c("grna_target", "response_id")) %>%
-  mutate(cell_type = "WTC11")
-
-# Combine power results
-power_wo_pos_controls <- rbind(power_wo_pos_controls_K562, power_wo_pos_controls_WTC11)
-
 # Calculate mean perturbation cells across all effect sizes for both cell types
-mean_pert_cells_summary <- combined_power_simulation %>%
+mean_pert_cells_summary <- gasperini_power_simulation %>%
   group_by(grna_target, response_id, cell_type) %>%
   summarize(
     mean_sim_pert_cells = mean(num_pert_cells, na.rm = TRUE),
@@ -131,7 +104,7 @@ mean_pert_cells_summary <- combined_power_simulation %>%
 # Merge both power calculations and mean_pert_cells back to final_pairs
 final_pairs <- final_pairs %>%
   left_join(
-    power_wo_pos_controls,
+    power_wo_pos_controls_gasperini,
     by = c("design_file_target_name" = "grna_target", "gene_id" = "response_id", "cell_type")
   ) %>%
   left_join(
