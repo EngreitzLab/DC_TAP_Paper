@@ -52,6 +52,8 @@ RDA_objects/
 
 # Log directories
 results/main_figure_1_and_2/logs/
+results/main_figure_3/logs/
+results/figures_wo_positive_controls/logs/
 results/process_validation_datasets/K562_DC_TAP_Seq/logs/
 results/process_validation_datasets/WTC11_DC_TAP_Seq/logs/
 seqspec/.DS_Store
