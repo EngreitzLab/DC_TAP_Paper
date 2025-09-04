@@ -11,7 +11,7 @@ lgl  (7): significant, DistalElement_Gene, DistalPromoter_Gene, selfPromoter...
 ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
 Applying custom FDR correction excluding positive controls
 Recalculating power for wo_pos_controls significance threshold for all effect sizes
-Max nominal p-value for K562 wo_pos_controls: 0.000953820404176549
-Max nominal p-value for WTC11 wo_pos_controls: 0.00163840886542108
+Max nominal p-value for K562 wo_pos_controls: 0.00301977000609972
+Max nominal p-value for WTC11 wo_pos_controls: 0.00526745207311387
 Saving output files
 Closing log file
