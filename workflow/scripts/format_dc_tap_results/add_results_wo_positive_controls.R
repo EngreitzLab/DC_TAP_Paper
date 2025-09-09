@@ -65,7 +65,7 @@ final_pairs <- element_gene_pairs %>%
     ),
     
     # Call significance at FDR specified padj_threshold (current default at 0.2)
-    significant_wo_pos_controls = case_when(
+    significant_wo_pos_controls_20fdr = case_when(
       include_in_fdr & !is.na(sceptre_adj_p_value_wo_pos_controls) ~ sceptre_adj_p_value_wo_pos_controls <= snakemake@params$padj_threshold,
       TRUE ~ NA
     )
@@ -79,12 +79,12 @@ message("Recalculating power for wo_pos_controls significance threshold for all 
 
 # Get max nominal p-value from wo_pos_controls significant pairs for each cell type
 max_nom_p_val_K562 <- final_pairs %>% 
-  filter(significant_wo_pos_controls == TRUE, cell_type == "K562") %>% 
+  filter(significant_wo_pos_controls_20fdr == TRUE, cell_type == "K562") %>% 
   pull(sceptre_p_value) %>% 
   max(na.rm = TRUE)
 
 max_nom_p_val_WTC11 <- final_pairs %>% 
-  filter(significant_wo_pos_controls == TRUE, cell_type == "WTC11") %>% 
+  filter(significant_wo_pos_controls_20fdr == TRUE, cell_type == "WTC11") %>% 
   pull(sceptre_p_value) %>% 
   max(na.rm = TRUE)
 
@@ -97,7 +97,7 @@ calculate_power_for_effect_size <- function(df, effect_size_val, max_p_val, cell
     filter(cell_type == cell_type_val, effect_size == effect_size_val, !is.na(log_2_fold_change)) %>%
     group_by(grna_target, response_id) %>%
     summarize(
-      !!paste0("power_at_effect_size_", effect_size_val, "_wo_pos_controls") := 
+      !!paste0("power_at_effect_size_", effect_size_val, "_wo_pos_controls_20fdr") := 
         mean(p_value < max_p_val & log_2_fold_change < 0),
       .groups = "drop"
     )
@@ -145,15 +145,21 @@ final_pairs <- final_pairs %>%
 # Power at all effect sizes without positive controls should be NA where significance wasn't calculated
 # Because Positive controls weren't included in the FDR correction
 for(es in effect_sizes) {
-  power_col <- paste0("power_at_effect_size_", es, "_wo_pos_controls")
-  final_pairs[[power_col]] <- ifelse(is.na(final_pairs$significant_wo_pos_controls), 
+  power_col <- paste0("power_at_effect_size_", es, "_wo_pos_controls_20fdr")
+  final_pairs[[power_col]] <- ifelse(is.na(final_pairs$significant_wo_pos_controls_20fdr), 
                                      NA, 
                                      final_pairs[[power_col]])
 }
 
 # Set mean_sim_pert_cells of pairs which power isn't calculated for to NA
 final_pairs <- final_pairs %>% 
-  mutate(mean_sim_pert_cells = ifelse(is.na(significant_wo_pos_controls), NA, mean_sim_pert_cells))
+  mutate(mean_sim_pert_cells = ifelse(is.na(significant_wo_pos_controls_20fdr), NA, mean_sim_pert_cells)) %>%
+  mutate(
+    # Recall significant_with_positive controls based on FDR 10.
+    significant = case_when(
+      !is.na(sceptre_adj_p_value) ~ sceptre_adj_p_value <= 0.10,
+      TRUE ~ NA
+    ))
 
 
 ### SAVE OUTPUT ===============================================================
