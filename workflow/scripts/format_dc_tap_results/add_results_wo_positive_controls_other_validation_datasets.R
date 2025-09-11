@@ -39,7 +39,7 @@ validations_power_simulation <- map_dfr(seq_along(effect_sizes), function(i) {
 #       as there could be a case where the input validation dataset 
 #       had not been pre-filtered of it's selfPromoter Pairs.
 
-message("Applying custom FDR correction excluding positive controls")
+message("Applying custom FDR correction excluding self promoters")
 
 # Apply FDR correction by cell type, excluding positive controls
 final_pairs <- element_gene_pairs %>%
@@ -50,15 +50,15 @@ final_pairs <- element_gene_pairs %>%
     include_in_fdr = !is.na(pValue),
     
     # Apply Benjamini-Hochberg correction only to the subset
-    sceptre_adj_p_value_wo_pos_controls = ifelse(
+    sceptre_adj_p_value_wo_self_promoters = ifelse(
       include_in_fdr & !is.na(pValue),
       p.adjust(ifelse(include_in_fdr & !is.na(pValue), pValue, NA), method = "BH"),
       NA_real_
     ),
     
     # Call significance at FDR specified padj_threshold (current default at 0.2)
-    significant_wo_pos_controls = case_when(
-      include_in_fdr & !is.na(sceptre_adj_p_value_wo_pos_controls) ~ sceptre_adj_p_value_wo_pos_controls <= snakemake@params$padj_threshold,
+    significant_wo_self_promoters_20fdr = case_when(
+      include_in_fdr & !is.na(sceptre_adj_p_value_wo_self_promoters) ~ sceptre_adj_p_value_wo_self_promoters <= snakemake@params$padj_threshold,
       TRUE ~ NA
     )
   ) %>%
@@ -70,7 +70,7 @@ calculate_power_for_effect_size <- function(df, effect_size_val, max_p_val) {
     filter(effect_size == effect_size_val, !is.na(log_2_fold_change)) %>%
     group_by(grna_target, response_id) %>%
     summarize(
-      !!paste0("power_at_effect_size_", effect_size_val, "_wo_pos_controls") := 
+      !!paste0("power_at_effect_size_", effect_size_val, "_wo_self_promoters_20fdr") := 
         mean(p_value < max_p_val & log_2_fold_change < 0),
       .groups = "drop"
     )
@@ -86,24 +86,24 @@ recalculate_power_for_effect_size <- function(df, effect_size_val, max_p_val) {
     )
 }
 
-### RECALCULATE POWER FOR WITH_POS_CONTROLS FOR ALL EFFECT SIZES ===============
+### RECALCULATE POWER FOR WITH_SELF_PROMOTERS FOR ALL EFFECT SIZES ===============
 
-message("Recalculating power for with_pos_controls significance threshold for all effect sizes")
+message("Recalculating power for with_self_promoters significance threshold for all effect sizes")
 
-# Update Significant calls based on specified FDR threshold
+# Update Significant calls based on specified FDR threshold. Keep significant column at standard threshold <= 0.10.
 final_pairs <- final_pairs %>%
-  mutate(Significant = pValueAdjusted <= snakemake@params$padj_threshold)
+  mutate(Significant = pValueAdjusted <= 0.1)
 
-# Get max nominal p-value from with_pos_controls significant pairs
+# Get max nominal p-value from with_self_promoters significant pairs
 max_nom_p_val_validations_recal <- final_pairs %>% 
   filter(Significant == TRUE) %>% 
   pull(pValue) %>% 
   max(na.rm = TRUE)
 
-message(paste("Max nominal p-value for validation dataset with_pos_controls:", max_nom_p_val_validations_recal))
+message(paste("Max nominal p-value for validation dataset with_self_promoters:", max_nom_p_val_validations_recal))
 
 # Calculate power for all effect sizes for Validation Dataset
-power_wo_pos_controls_validations_recal <- map(effect_sizes, function(es) {
+power_validations_recal <- map(effect_sizes, function(es) {
   recalculate_power_for_effect_size(validations_power_simulation, es, max_nom_p_val_validations_recal)
 }) %>%
   reduce(left_join, by = c("grna_target", "response_id"))
@@ -115,24 +115,24 @@ final_pairs <- final_pairs %>%
   # Drop existing power calculations
   select(-matches("^PowerAtEffectSize")) %>%
   left_join(
-    power_wo_pos_controls_validations_recal,
+    power_validations_recal,
     by = c("PerturbationTargetID" = "grna_target", "measuredEnsemblID" = "response_id")
   )
 
-### RECALCULATE POWER FOR WO_POS_CONTROLS FOR ALL EFFECT SIZES ===============
+### RECALCULATE POWER FOR WO_SELF_PROMOTERS FOR ALL EFFECT SIZES ===============
 
-message("Recalculating power for wo_pos_controls significance threshold for all effect sizes")
+message("Recalculating power for wo_self_promoters significance threshold for all effect sizes")
 
-# Get max nominal p-value from wo_pos_controls significant pairs
+# Get max nominal p-value from wo_self_promoters significant pairs
 max_nom_p_val_validations <- final_pairs %>% 
-  filter(significant_wo_pos_controls == TRUE) %>% 
+  filter(significant_wo_self_promoters_20fdr == TRUE) %>% 
   pull(pValue) %>% 
   max(na.rm = TRUE)
 
-message(paste("Max nominal p-value for validation dataset wo_pos_controls:", max_nom_p_val_validations))
+message(paste("Max nominal p-value for validation dataset wo_self_promoters:", max_nom_p_val_validations))
 
 # Calculate power for all effect sizes for Validation Dataset
-power_wo_pos_controls_validations <- map(effect_sizes, function(es) {
+power_wo_self_promoters_validations <- map(effect_sizes, function(es) {
   calculate_power_for_effect_size(validations_power_simulation, es, max_nom_p_val_validations)
 }) %>%
   reduce(left_join, by = c("grna_target", "response_id"))
@@ -148,7 +148,7 @@ mean_pert_cells_summary <- validations_power_simulation %>%
 # Merge both power calculations and mean_pert_cells back to final_pairs
 final_pairs <- final_pairs %>%
   left_join(
-    power_wo_pos_controls_validations,
+    power_wo_self_promoters_validations,
     by = c("PerturbationTargetID" = "grna_target", "measuredEnsemblID" = "response_id")
   ) %>%
   left_join(
@@ -157,20 +157,20 @@ final_pairs <- final_pairs %>%
   )
 
 
-### MAKE POWER_WO_POS_CONTROLS NA FOR ALL EFFECT SIZES =======================
+### MAKE POWER_WO_SELF_PROMOTERS NA FOR ALL EFFECT SIZES =======================
 
 # Power at all effect sizes without positive controls should be NA where significance wasn't calculated
 # Because Positive controls weren't included in the FDR correction
 for(es in effect_sizes) {
-  power_col <- paste0("power_at_effect_size_", es, "_wo_pos_controls")
-  final_pairs[[power_col]] <- ifelse(is.na(final_pairs$significant_wo_pos_controls), 
+  power_col <- paste0("power_at_effect_size_", es, "_wo_self_promoters_20fdr")
+  final_pairs[[power_col]] <- ifelse(is.na(final_pairs$significant_wo_self_promoters_20fdr), 
                                      NA, 
                                      final_pairs[[power_col]])
 }
 
 # Set mean_sim_pert_cells of pairs which power isn't calculated for to NA
 final_pairs <- final_pairs %>% 
-  mutate(mean_sim_pert_cells = ifelse(is.na(significant_wo_pos_controls), NA, mean_sim_pert_cells))
+  mutate(mean_sim_pert_cells = ifelse(is.na(significant_wo_self_promoters_20fdr), NA, mean_sim_pert_cells))
 
 
 ### SAVE OUTPUT ===============================================================

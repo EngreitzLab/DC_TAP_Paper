@@ -130,7 +130,7 @@ rule add_results_wo_positive_controls_Gasperini:
 datasets = ["Klann", "Morrisv1", "Morrisv2", "Xie"]
 rule add_results_wo_positive_controls_other_validation_datasets:
   input:
-    expand("results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_{sample}.tsv", sample = datasets)
+    expand("results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_{sample}.tsv", sample = datasets)
 
 # FDR correction on non-positive controls for one validation dataset
 rule add_results_wo_positive_controls_validation_dataset:
@@ -138,7 +138,7 @@ rule add_results_wo_positive_controls_validation_dataset:
     validation_dataset_power_analysis_results = lambda w: f"resources/main_figure_3/ENCODE_{w.sample}_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
     combined_power_analysis_output_validation_dataset = (lambda w: expand("resources/main_figure_3/{sample}/power_analysis/combined_power_analysis_output_es_{es}.tsv", sample = [w.sample], es = [0.02, 0.03, 0.05, 0.10, 0.15, 0.20, 0.25, 0.50]))
   output:
-    results_wo_pos_controls = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_{sample}.tsv"
+    results_wo_pos_controls = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_{sample}.tsv"
   params:
     padj_threshold = config["process_validation_datasets"]["differential_expression"]["padj_threshold"],
   log: "results/formatted_dc_tap_results/logs/add_results_wo_positive_controls_other_validation_{sample}.log"

@@ -57,8 +57,25 @@ datasets <- list(
 get_power_col <- function(nms, es, prefer_wo = FALSE) {
   base_snake <- paste0("power_at_effect_size_", es)
   base_camel <- paste0("PowerAtEffectSize", es)
-  wo_snake   <- paste0(base_snake, "_wo_pos_controls")
-  wo_camel   <- paste0(base_camel, "_wo_pos_controls")
+  wo_snake   <- paste0(base_snake, "_wo_pos_controls_20fdr")
+  wo_camel   <- paste0(base_camel, "_wo_pos_controls_20fdr")
+  
+  # Try wo_pos_controls first if requested
+  if (prefer_wo) {
+    if (wo_snake %in% nms) return(wo_snake)
+    if (wo_camel %in% nms) return(wo_camel)
+  }
+  # Otherwise, or fallback
+  if (base_snake %in% nms) return(base_snake)
+  if (base_camel %in% nms) return(base_camel)
+  
+  NA_character_
+}
+get_power_col_validation <- function(nms, es, prefer_wo = FALSE) {
+  base_snake <- paste0("power_at_effect_size_", es)
+  base_camel <- paste0("PowerAtEffectSize", es)
+  wo_snake   <- paste0(base_snake, "_wo_self_promoters_20fdr")
+  wo_camel   <- paste0(base_camel, "_wo_self_promoters_20fdr")
   
   # Try wo_pos_controls first if requested
   if (prefer_wo) {
@@ -72,11 +89,14 @@ get_power_col <- function(nms, es, prefer_wo = FALSE) {
   NA_character_
 }
 
-calc_power_props <- function(df, dataset_name, prefer_wo = FALSE) {
+calc_power_props <- function(df, dataset_name, prefer_wo = FALSE, encode_dataset = FALSE) {
   es_list <- c(10, 15, 20, 25, 50)
   
   purrr::map_dfr(es_list, function(es) {
-    col <- get_power_col(names(df), es, prefer_wo = prefer_wo)
+    col <- if (encode_dataset)
+      get_power_col_validation(names(df), es, prefer_wo = prefer_wo)
+    else
+      get_power_col(names(df), es, prefer_wo = prefer_wo)
     if (is.na(col)) {
       warning(dataset_name, ": no column for effect-size ", es)
       return(tibble(effect_size = es,
@@ -100,9 +120,9 @@ all_power_props <- dplyr::bind_rows(
   calc_power_props(k562_dc_tap,    "K562",      prefer_wo = TRUE),
   calc_power_props(wtc11_dc_tap,   "WTC11",     prefer_wo = TRUE),
   calc_power_props(gasperini_results, "Gasperini", prefer_wo = TRUE),
-  calc_power_props(morris,         "Morris",    prefer_wo = TRUE),
-  calc_power_props(klann,          "Klann",     prefer_wo = TRUE),
-  calc_power_props(xie,            "Xie",       prefer_wo = TRUE)
+  calc_power_props(morris,         "Morris",    prefer_wo = TRUE, encode_dataset = TRUE),
+  calc_power_props(klann,          "Klann",     prefer_wo = TRUE, encode_dataset = TRUE),
+  calc_power_props(xie,            "Xie",       prefer_wo = TRUE, encode_dataset = TRUE)
 )
 
 

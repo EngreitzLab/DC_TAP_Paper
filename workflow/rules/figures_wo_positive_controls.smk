@@ -37,11 +37,11 @@ rule effect_size_plots_FDR_wo_pos_controls:
 rule compare_effect_sizes_to_other_screens_FDR_wo_pos_controls:
   input:
     gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv",
-    dc_tap_results = "results/formatted_dc_tap_results/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements.tsv",
-    klann = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Klann.tsv",
-    morrisv1 = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Morrisv1.tsv",
-    morrisv2 = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Morrisv2.tsv",
-    xie = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Xie.tsv",
+    dc_tap_results = "results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv",
+    klann = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_Klann.tsv",
+    morrisv1 = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_Morrisv1.tsv",
+    morrisv2 = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_Morrisv2.tsv",
+    xie = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_Xie.tsv",
   output:
     effect_size_comparison = "results/figures_wo_positive_controls/compare_effect_sizes_to_other_screens/effect_size_comparison.pdf"
   log: "results/figures_wo_positive_controls/logs/compare_effect_sizes_to_other_screens.log"
@@ -57,11 +57,11 @@ rule compare_effect_sizes_to_other_screens_FDR_wo_pos_controls:
 rule power_to_detect_change_for_all_datasets_FDR_wo_pos_controls:
   input:
     gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv",
-    dc_tap_results = "results/formatted_dc_tap_results/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements.tsv",
-    klann = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Klann.tsv",
-    morrisv1 = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Morrisv1.tsv",
-    morrisv2 = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Morrisv2.tsv",
-    xie = "results/main_figure_3/results_wo_positive_controls/results_with_element_gene_pair_categories_wo_pos_controls_Xie.tsv",
+    dc_tap_results = "results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv",
+    klann = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_Klann.tsv",
+    morrisv1 = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_Morrisv1.tsv",
+    morrisv2 = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_Morrisv2.tsv",
+    xie = "results/main_figure_3/results_wo_positive_controls/encode_results_with_sceptre_power_analysis_perCRE_wo_self_promoter_Xie.tsv",
   output:
     power_for_all_datasets_by_proportion = "results/figures_wo_positive_controls/power_to_detect_change_for_all_datasets/power_for_all_datasets_by_proportion.pdf"
   log: "results/figures_wo_positive_controls/logs/power_to_detect_change_for_all_datasets.log"
