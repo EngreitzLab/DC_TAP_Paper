@@ -41,6 +41,8 @@ results/main_figure_1_and_2/compare_replicates/*/final_sceptre_object.rds
 # Genome annotation files
 results/genome_annotation_files/*
 
+# Figures without positive controls
+results/main_figure_3/results_wo_positive_controls/ARCHIVE/*
 
 # OTHER ----------
 ARCHIVE/*
