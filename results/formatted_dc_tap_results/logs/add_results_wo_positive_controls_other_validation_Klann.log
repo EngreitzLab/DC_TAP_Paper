@@ -10,10 +10,10 @@ lgl  (6): EffectSize95ConfidenceIntervalLow, EffectSize95ConfidenceIntervalH...
 ℹ Use `spec()` to retrieve the full column specification for this data.
 ℹ Specify the column types or set `show_col_types = FALSE` to quiet this message.
 Loading combined power analysis files
-Applying custom FDR correction excluding positive controls
-Recalculating power for with_pos_controls significance threshold for all effect sizes
-Max nominal p-value for validation dataset with_pos_controls: 0.00116117986484572
-Recalculating power for wo_pos_controls significance threshold for all effect sizes
-Max nominal p-value for validation dataset wo_pos_controls: 0.00116117986484572
+Applying custom FDR correction excluding self promoters
+Recalculating power for with_self_promoters significance threshold for all effect sizes
+Max nominal p-value for validation dataset with_self_promoters: 4e-04
+Recalculating power for wo_self_promoters significance threshold for all effect sizes
+Max nominal p-value for validation dataset wo_self_promoters: 0.00116117986484572
 Saving output files
 Closing log file
