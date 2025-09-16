@@ -12,6 +12,12 @@ resources/main_figure_1_and_2/downsampling_reads_for_UMIs/crisprdi_direct_captur
 resources/main_figure_1_and_2/downsampling_reads_for_UMIs/moi3_fixed/molecule_info.h5
 resources/main_figure_1_and_2/downsampling_reads_for_UMIs/moi6_fixed/molecule_info.h5
 
+# Encode Validation Power Analysis Resources
+resources/main_figure_3/Klann/power_analysis/*
+resources/main_figure_3/Morrisv1/power_analysis/*
+resources/main_figure_3/Morrisv2/power_analysis/*
+resources/main_figure_3/Xie/power_analysis/*
+
 # RESULTS FILES -------
 
 # Dataset Processing
@@ -34,6 +40,7 @@ results/main_figure_1_and_2/duplicate_pairs_analysis/perturb_sce.rds
 results/main_figure_1_and_2/duplicate_pairs_analysis/raw_counts.rds
 # Temporarily excluding this file here because its a little over github's 50Mb file limit (76Mb) - should gzip
 results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories.tsv
+results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv
 
 # Large sceptre objects in compare_replicates
 results/main_figure_1_and_2/compare_replicates/*/final_sceptre_object.rds
