@@ -33,7 +33,7 @@ upper_CI_95_pct_change, Upper bound of the 95% confidence interval for percent c
 # Significance
 sceptre_p_value, Raw p-value from SCEPTRE test for association between the element and gene
 sceptre_adj_p_value, Adjusted p-value after multiple hypothesis testing correction
-significant, Boolean indicator of whether the element-gene pair shows significant association after FDR
+significant, Boolean indicator of whether the element-gene pair shows significant association at adjusted p-value of <10%
 
 # Gene Stats
 distance_to_gencode_gene_TSS, Distance in base pairs from element to gene's transcription start site (TSS) in GENCODE
@@ -55,14 +55,14 @@ Positive_Control_selfPromoter, Pairs that are selfPromoter and which were origin
 Random_DistalElement_Gene, High-confidence distal element-gene pairs that are "unbiased" elements targeted in each of the 25 2Mb loci
 
 # Statistical power to detect N% effect size
-power_at_effect_size_2, Statistical power to detect an effect size of 2% change
-power_at_effect_size_3, Statistical power to detect an effect size of 3% change
-power_at_effect_size_5, Statistical power to detect an effect size of 5% change
-power_at_effect_size_10, Statistical power to detect an effect size of 10% change
-power_at_effect_size_15, Statistical power to detect an effect size of 15% change
-power_at_effect_size_20, Statistical power to detect an effect size of 20% change
-power_at_effect_size_25, Statistical power to detect an effect size of 25% change
-power_at_effect_size_50, Statistical power to detect an effect size of 50% change
+power_at_effect_size_2, Statistical power to detect an effect size of 2% change at adjusted p-value of <10%
+power_at_effect_size_3, Statistical power to detect an effect size of 3% change at adjusted p-value of <10%
+power_at_effect_size_5, Statistical power to detect an effect size of 5% change at adjusted p-value of <10%
+power_at_effect_size_10, Statistical power to detect an effect size of 10% change at adjusted p-value of <10%
+power_at_effect_size_15, Statistical power to detect an effect size of 15% change at adjusted p-value of <10%
+power_at_effect_size_20, Statistical power to detect an effect size of 20% change at adjusted p-value of <10%
+power_at_effect_size_25, Statistical power to detect an effect size of 25% change at adjusted p-value of <10%
+power_at_effect_size_50, Statistical power to detect an effect size of 50% change at adjusted p-value of <10%
 
 # Screen design information
 intended_positive_control_distal_element_target_gene, the intended response gene for the positive control distal elements
@@ -71,12 +71,31 @@ design_file_target_name, the original target name in the screen design
 design_file_type, the original target type in the screen design (tss_pos = promoter element of a positive control gene; tss_random = promoter element of random gene in random loci; enh = candidate cis-regulatory element; DE = positive control distal element)
 guide_ids, list of the guide ids targeting the element
 
+# Statistical power to detect N% effect size at FDR 20%
+include_in_fdr = indicator if the element-gene pair was included for FDR calculation without the positive
+controls, i.e. with the conditional (selfPromoter == FALSE & Positive_Control_DistalElement_Gene == FALSE & Positive_Control_selfPromoter == FALSE);
+sceptre_adj_p_value_wo_pos_controls, Adjusted p-value after multiple hypothesis testing correction upon removing the positive controls
+significant_wo_pos_controls_20fdr, indicator if the element-gene pair shows significant association after removal of positive controls at adjusted p-value of <20%
+power_at_effect_size_2_wo_pos_controls_20fdr, Statistical power to detect an effect size of 2% change upon removal of positive controls at adjusted p-value of <20%
+power_at_effect_size_3_wo_pos_controls_20fdr, Statistical power to detect an effect size of 3% change upon removal of positive controls at adjusted p-value of <20%
+power_at_effect_size_5_wo_pos_controls_20fdr, Statistical power to detect an effect size of 5% change upon removal of positive controls at adjusted p-value of <20%
+power_at_effect_size_10_wo_pos_controls_20fdr, Statistical power to detect an effect size of 10% change upon removal of positive controls at adjusted p-value of <20%
+power_at_effect_size_15_wo_pos_controls_20fdr, Statistical power to detect an effect size of 15% change upon removal of positive controls at adjusted p-value of <20%
+power_at_effect_size_20_wo_pos_controls_20fdr, Statistical power to detect an effect size of 20% change upon removal of positive controls at adjusted p-value of <20%
+power_at_effect_size_25_wo_pos_controls_20fdr, Statistical power to detect an effect size of 25% change upon removal of positive controls at adjusted p-value of <20%
+power_at_effect_size_50_wo_pos_controls_20fdr, Statistical power to detect an effect size of 50% change upon removal of positive controls at adjusted p-value of <20%
+mean_sim_pert_cell, Mean number of cells perturbed between 100 replicates of power simulation
+
 # Chromatin Categories
 resized_merged_targeting_chr_hg38, The chromosome of the resized_merged_element_gene_pair_identifier_hg38
 resized_merged_targeting_start_hg38, The start of the resized_merged_element_gene_pair_identifier_hg38
 resized_merged_targeting_end_hg38, The end of the resized_merged_element_gene_pair_identifier_hg38
 resized_merged_element_gene_pair_identifier_hg38, Unique identidier for the resized and merged regions that were inputted into the chromatin categories pipeline in gene_symbol|chr:start-end format
-ubiq_category, Whether or not that gene is a ubiquitously expressed gene
-element_category_with_dnase, The element category with information on DNase level
-element_category_simple, Constituents of the element_category column
-element_category, Different chromatin features overlapped with the element region (H3K27me3 overlap, CTCF overlap, H3K27ac high, H3K27ac medium, H3K27ac low)
+ubiq_category, classification indicating whether the target gene is classified as ubiquitously and uniformly expressed (e.g., a housekeeping gene)
+direct_rate_negative, Estimated rate of direct negative effects based on distance to TSS for tested element-gene pair
+indirect_rate_negative, Estimated rate of indirect negative effects for the dataset to which this pair belongs
+direct_vs_indirect_negative, Probability that an observed negative effect size represents is the result of a direct cis-regulatory interaction
+direct_rate_positive, Estimated rate of direct positive effects based on distance to TSS for tested element-gene pairs
+indirect_rate_positive, Estimated rate of indirect positive effects for the dataset to which this pair belongs
+direct_vs_indirect_positive, Probability that an observed positive effect size represents is the result of a direct cis-regulatory interaction
+element_category, Classification of perturbed elements based on chromatin marks
