@@ -360,7 +360,12 @@ def _(
             "ranked_target_name": df.loc[:,"ranked_target_name"],
             "num_off_targets": df.loc[:,"off_targets"].apply(
                 lambda e: e if (pd.notna(e) and str(e).strip()) else pd.NA
-            )
+            ),
+            "agg_cfd_score": df.loc[:, "Aggregate CFD Score"],
+            "offtarget_cfd100_hits": df.loc[:, "Off-Target CFD100 Hits"],
+            "offtarget_cfd100t1_hits": df.loc[:, "Off-Target Tier I CFD100 Hits"],
+            "ontarget_eff_score": df.loc[:, "On-Target Efficacy Score"],
+            "crispick_pickorder": df.loc[:, "Pick Order"]
         }).to_csv(out, header=True, index=False, sep="\t")
 
     create_intermediate_metadata("WTC11", wtc11_designs, out_wtc11_bed, out_wtc11_metadata)
