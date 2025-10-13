@@ -104,23 +104,22 @@ def _(
     def create_crispick_inputs(targets, offset, out):
         guide_designer_window = targets.slop(
             genome="hg38", 
-            s=True, 
-            l=offset, 
-            r=offset
+            l=offset - 1, # convert bed 0-based to CRISPick format
+            r=offset - 1  # convert bed 0-based to CRISPick format
         )
-    
+
         # Format to satisfy CRISPick input target specification.
         df = guide_designer_window.to_dataframe(header=None, usecols=[0, 1, 2, 5])
         df["targets"] = (df.chrom.astype(str) 
             + ":" + df.strand.astype(str) 
             + ":" + df.start.astype(str) + "-" + df.end.astype(str)
         )
-    
+
         # Write To TSV. This file is uploaded to CRISPick to design guides for the selected target regions.
         out.parent.mkdir(parents=True, exist_ok=True)
         df.targets.to_csv(out, sep="\t", index=False, header=False)
         return guide_designer_window, df
-    
+
 
     window_w, df_w = create_crispick_inputs(wtc11_targets, target_expansion_offset, wtc11_out)
     window_k, df_k = create_crispick_inputs(k562_targets, target_expansion_offset, k562_out)
@@ -172,7 +171,7 @@ def _(Path, df_k, df_w, k562_targets, pd, window_k, window_w, wtc11_targets):
     # For matching intended target with CRISPick region to design against
     def create_intermediates(i_out, targets, df):
         i_out.parent.mkdir(parents=True, exist_ok=True)
-    
+
         i_intended_df = targets.to_dataframe(dtype={"start": "Int64", "end": "Int64"}).drop(index=0).reset_index()
         i_match_df = pd.DataFrame({
             "intended_target_name": (
@@ -181,7 +180,7 @@ def _(Path, df_k, df_w, k562_targets, pd, window_k, window_w, wtc11_targets):
             ),
             "crispick_targets": df["targets"]
         })
-    
+
         i_match_df.to_csv(i_out, sep="\t", index=False)
 
 

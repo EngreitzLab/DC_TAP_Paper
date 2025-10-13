@@ -71,6 +71,7 @@ seqspec/.python-version
 # Validations
 validations/data/
 validations/results/
+validations/.venv
 
 # macOS
 .DS_Store
