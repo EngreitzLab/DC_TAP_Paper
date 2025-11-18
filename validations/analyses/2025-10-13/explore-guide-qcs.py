@@ -36,13 +36,20 @@ def _():
     import numpy as np
     import pandas as pd
     import matplotlib.pyplot as plt
-    return math, np, pd, plt
+    return Path, math, np, pd, plt
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""## Main Notebook""")
     return
+
+
+@app.cell
+def _(Path):
+    # Define Inputs
+    out_dir = Path("results/2025-10-13/")
+    return (out_dir,)
 
 
 @app.cell(hide_code=True)
@@ -94,10 +101,38 @@ def _(plt):
 
 @app.cell
 def _(plot_cp_offtarget_distribution, w_metadata):
-    w_cp_offtarget_dplot, _ = plot_cp_offtarget_distribution(
+    w_cp_offtarget_dplot, w_cp_offtarget_dplot_a = plot_cp_offtarget_distribution(
         get_per_target_subset(w_metadata, "chr17:7632480-7632781")
     )
+    w_cp_offtarget_dplot_a.set_xlabel("CRISPick Pick Order")
+    w_cp_offtarget_dplot_a.set_ylabel("Agg CFD Score")
+    # w_cp_offtarget_dplot.savefig(out_dir / "CPvsCFD.png")
     w_cp_offtarget_dplot
+    return
+
+
+@app.cell
+def _(plt):
+    def plot_cp_offtarget_hits(subset):
+        subset = subset.sort_values(by="crispick_pickorder")
+        fig, axs = plt.subplots()
+        x = subset.loc[:,"crispick_pickorder"]
+        y = subset.loc[:, "offtarget_cfd100_hits"]
+        axs.plot(x, y)
+
+        return fig, axs
+    return (plot_cp_offtarget_hits,)
+
+
+@app.cell
+def _(plot_cp_offtarget_hits, w_metadata):
+    w_cp_offtarget_hplot, w_cp_offtarget_hplot_a = plot_cp_offtarget_hits(
+        get_per_target_subset(w_metadata, "chr17:7632480-7632781")
+    )
+    w_cp_offtarget_hplot_a.set_xlabel("CRISPick Pick Order")
+    w_cp_offtarget_hplot_a.set_ylabel("CFD1 Off-Target Hits")
+    # w_cp_offtarget_hplot.savefig(out_dir / "CPvsCFD1hits.png")
+    w_cp_offtarget_hplot
     return
 
 
@@ -111,16 +146,17 @@ def _(plt):
         axs.plot(x, y)
 
         return fig, axs
-
-
     return (plot_cp_ontarget_distribution,)
 
 
 @app.cell
 def _(plot_cp_ontarget_distribution, w_metadata):
-    w_cp_ontarget_dplot, _ = plot_cp_ontarget_distribution(
+    w_cp_ontarget_dplot, w_cp_ontarget_dplot_a = plot_cp_ontarget_distribution(
         get_per_target_subset(w_metadata, "chr17:7632480-7632781")
     )
+    w_cp_ontarget_dplot_a.set_xlabel("CRISPick Pick Order")
+    w_cp_ontarget_dplot_a.set_ylabel("On-Target Efficacy Score")
+    # w_cp_ontarget_dplot.savefig(out_dir / "CPvsOnTarget.png")
     w_cp_ontarget_dplot
     return
 
@@ -154,10 +190,14 @@ def _(np, plt):
 
 @app.cell
 def _(plot_offtarget_distribution, w_metadata):
-    w_offtarget_dplot, _ = plot_offtarget_distribution(
+    w_offtarget_dplot, w_offtarget_dplot_a = plot_offtarget_distribution(
         get_per_target_subset(w_metadata, "chr17:7632480-7632781"),
         crit_threshold=40
     )
+    w_offtarget_dplot_a.set_xlabel("Guide ID")
+    w_offtarget_dplot_a.set_ylabel("Agg. CFD Score")
+    w_offtarget_dplot_a.tick_params(axis="x", rotation=45, labelsize=6)
+    # w_offtarget_dplot.savefig(out_dir / "IDvsCFD.png")
     w_offtarget_dplot
     return
 
@@ -167,10 +207,10 @@ def _(np, plt):
     def plot_offtarget_hits(subset, crit_threshold=None, axs=None, title=None):
         query = "offtarget_cfd100_hits"
         subset = subset.sort_values(by=query, ascending=False)
-    
+
         if axs is None:
             fig, axs = plt.subplots()
-    
+
         x = subset.loc[:,"guide_id"].str.replace(r'^[^_]*_[^_]*_', '', regex=True)
         y = subset.loc[:, query]
         axs.plot(x, y)
@@ -191,10 +231,15 @@ def _(np, plt):
 
 @app.cell
 def _(plot_offtarget_hits, w_metadata):
-    w_offtarget_hplot, _ = plot_offtarget_hits(
+    w_offtarget_hplot, w_offtarget_hplot_a = plot_offtarget_hits(
         get_per_target_subset(w_metadata, "chr17:7632480-7632781"),
         crit_threshold=1
     )
+
+    w_offtarget_hplot_a.set_xlabel("Guide ID")
+    w_offtarget_hplot_a.set_ylabel("CFD1 Off-Target Hits")
+    w_offtarget_hplot_a.tick_params(axis="x", rotation=45, labelsize=6)
+    # w_offtarget_hplot.savefig(out_dir / "IDvsCFD1hits.png")
     w_offtarget_hplot
     return
 
@@ -204,7 +249,7 @@ def _(np, plt):
     def plot_ontarget_distribution(subset, crit_threshold=None, axs=None, title=None):
         query = "ontarget_eff_score"
         subset = subset.sort_values(by=query, ascending=False)
-    
+
         if axs is None:
             fig, axs = plt.subplots()
 
@@ -218,20 +263,25 @@ def _(np, plt):
             ids = list(s.loc[:, "guide_id"])
             print(f"Total Guides above Threshold: {len(ids)}")
             print(f"Guide_IDs >= {crit_threshold} On-Target Efficacy Score: {ids}")
-        
+
         if title:
             axs.set_title(title) 
-        
+
         return axs.figure, axs
     return (plot_ontarget_distribution,)
 
 
 @app.cell
 def _(plot_ontarget_distribution, w_metadata):
-    w_ontarget_dplot, _ = plot_ontarget_distribution(
+    w_ontarget_dplot, w_ontarget_dplot_a = plot_ontarget_distribution(
         get_per_target_subset(w_metadata, "chr17:7632480-7632781"),
-        crit_threshold=0.54
+        crit_threshold=0.6
     )
+
+    w_ontarget_dplot_a.set_xlabel("Guide ID")
+    w_ontarget_dplot_a.set_ylabel("On-Target Efficacy Score")
+    w_ontarget_dplot_a.tick_params(axis="x", rotation=45, labelsize=6)
+    # w_ontarget_dplot.savefig(out_dir / "IDvsOnTarget.png")
     w_ontarget_dplot
     return
 
@@ -255,7 +305,7 @@ def _(math, np, plt):
                 title = t
             )
             increment += 1
-    
+
         return fig
     return (plot_all_by_query,)
 
@@ -287,12 +337,14 @@ def _(w_plots_offtarget_dist):
 @app.cell
 def _(w_plots_offtarget_hits):
     w_plots_offtarget_hits
+    # w_plots_offtarget_hits.savefig(out_dir / "IDvsCFD1hits_all.png")
     return
 
 
 @app.cell
 def _(w_plots_ontarget_dist):
     w_plots_ontarget_dist
+    # w_plots_ontarget_dist.savefig(out_dir / "IDvsOnTarget_all.png")
     return
 
 
@@ -305,6 +357,36 @@ def _(mo):
 @app.cell
 def _(w_metadata):
     print(w_metadata)
+    return
+
+
+@app.cell
+def _(out_dir, plot_cp_offtarget_hits, w_metadata):
+    w_cp_offtarget_hplot_chr19, w_cp_offtarget_hplot_a_chr19 = plot_cp_offtarget_hits(
+        get_per_target_subset(w_metadata, "chr19:13163707-13164140")
+    )
+    w_cp_offtarget_hplot_a_chr19.set_xlabel("CRISPick Pick Order")
+    w_cp_offtarget_hplot_a_chr19.set_ylabel("CFD1 Off-Target Hits")
+    w_cp_offtarget_hplot_a_chr19.axvline(x=25, color='#dddddd', linestyle='--', linewidth=1.5)
+
+    w_cp_offtarget_hplot_chr19.suptitle("WTC11-Target-4:chr19:13163707-13164140")
+    w_cp_offtarget_hplot_chr19.savefig(out_dir / "CPvsCFD1hits-chr19.png")
+    w_cp_offtarget_hplot_chr19
+    return
+
+
+@app.cell
+def _(out_dir, plot_cp_offtarget_hits, w_metadata):
+    w_cp_offtarget_hplot_ch17, w_cp_offtarget_hplot_a_ch17 = plot_cp_offtarget_hits(
+        get_per_target_subset(w_metadata, "chr17:7560401-7560702")
+    )
+    w_cp_offtarget_hplot_a_ch17.set_xlabel("CRISPick Pick Order")
+    w_cp_offtarget_hplot_a_ch17.set_ylabel("CFD1 Off-Target Hits")
+    w_cp_offtarget_hplot_a_ch17.axvline(x=20, color='#dddddd', linestyle='--', linewidth=1.5)
+
+    w_cp_offtarget_hplot_ch17.suptitle("WTC11-Target-3:chr17:7560401-7560702")
+    w_cp_offtarget_hplot_ch17.savefig(out_dir / "CPvsCFD1hits-ch17.png")
+    w_cp_offtarget_hplot_ch17
     return
 
 

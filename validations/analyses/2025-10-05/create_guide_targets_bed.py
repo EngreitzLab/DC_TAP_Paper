@@ -267,8 +267,8 @@ def _(
     def get_cutposition_bed(celltype, df, out):
         bed_df = pd.DataFrame({
             "chr": df.loc[:, "chr"],
-            "start": df.loc[:, "sgRNA Cut Position (1-based)"],
-            "end": df.loc[:, "sgRNA Cut Position (1-based)"] + 1,
+            "start": df.loc[:, "sgRNA Cut Position (1-based)"] - 1,
+            "end": df.loc[:, "sgRNA Cut Position (1-based)"],
             "name": df.loc[:, "ranked_target_name"],
             "score": ".",
             "strand": df.loc[:,"Strand of sgRNA"]
@@ -353,6 +353,7 @@ def _(
             "guide_start": df.loc[:,"start"].astype("Int64"),
             "guide_end": df.loc[:,"end"].astype("Int64"),
             "strand": df.loc[:,"strand"],
+            "predicted_cutposition": df.loc[:,"sgRNA Cut Position (1-based)"],
             "intended_target_name": df.loc[:,"intended_target_name"],
             "intended_target_chr": df.loc[:,"intended_target_name"].str.replace(r'(:).+', '', regex=True),
             "intended_target_start": df.loc[:,"intended_target_name"].str.replace(r'^[^:]+:(\d+)-\d+$', r'\1', regex=True),
@@ -365,7 +366,8 @@ def _(
             "offtarget_cfd100_hits": df.loc[:, "Off-Target CFD100 Hits"],
             "offtarget_cfd100t1_hits": df.loc[:, "Off-Target Tier I CFD100 Hits"],
             "ontarget_eff_score": df.loc[:, "On-Target Efficacy Score"],
-            "crispick_pickorder": df.loc[:, "Pick Order"]
+            "crispick_pickorder": df.loc[:, "Pick Order"],
+            "crispick_pickround": df.loc[:, "Picking Round"]
         }).to_csv(out, header=True, index=False, sep="\t")
 
     create_intermediate_metadata("WTC11", wtc11_designs, out_wtc11_bed, out_wtc11_metadata)
@@ -387,7 +389,7 @@ def _(mo):
 
     |Cell Type| IGV Session Link (all tracks)| IGV Session Link (min tracks)| 
     |---------|------------------------------|------------------------------|
-    |`WTC11`  |https://tinyurl.com/3hsrhtcc  |https://tinyurl.com/mnh7aj5x  |
+    |`WTC11`  |https://tinyurl.com/4nd6vruj  |https://tinyurl.com/33wkjsy2  |
     |`K562`   |https://tinyurl.com/49nmfu3p  |https://tinyurl.com/34ymhnvz  |
 
     #### Final Sessions 
