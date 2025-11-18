@@ -197,6 +197,7 @@ def find_largest_singleton_effectsize(df1, df2):
         .groupby("element_gene_pair_identifier_hg38")["pct_change_effect_size_y"]
         .min()
     )
+    print(largest_effect_per_pair)
 
     # Attach back to df1
     df1["largest_effect_size"] = df1["element_gene_pair_identifier_hg38"].map(largest_effect_per_pair)

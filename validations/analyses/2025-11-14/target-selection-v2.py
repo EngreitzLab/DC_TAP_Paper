@@ -142,7 +142,7 @@ def _(BedTool, pd):
         "tRNA" : BedTool("data/2025-11-10/rmsk/tRNA.bed.gz"),
         "UNKNOWN" : BedTool("data/2025-11-10/rmsk/UNKNOWN.bed.gz")
     }
-    return rmsk_dict, tbl_s3
+    return rmsk_dict, tbl_s3, wtc11_singleton
 
 
 @app.cell(hide_code=True)
@@ -261,8 +261,171 @@ def _(mkbed, rmsk_dict):
 
 
 @app.cell
-def _():
+def _(mo, pd, preprocess, wtc11_singleton):
     # Function to add Singleton features
+
+    def merge_singelton(df_s3, df_sing):
+        """
+        Helper method to merge singleton dataframe to table_s3 dataframe
+        """
+        # Split comma-separated guide_ids into lists
+        df_s3["guide_list"] = df_s3["guide_ids"].str.split(",")
+
+        # Explode to one row per guid
+        df_s3_expanded = df_s3.explode("guide_list")
+        df_s3_expanded["guide_list"] = df_s3_expanded["guide_list"].str.strip()
+
+        # Merge with df_sing to get effect_size for each guide
+        merged = df_s3_expanded.merge(
+            df_sing[[
+                "grna_id", 
+                "response_id", 
+                "pct_change_effect_size",
+                "n_nonzero_trt",
+                "n_nonzero_cntrl",
+                "standard_error_pct_change"
+            ]],
+            left_on=["guide_list", "gene_id"],
+            right_on=["grna_id", "response_id"],
+            how="left",
+        )
+
+        # Re-label column names
+        merged = merged.rename(columns={
+            "response_id" : "singleton_response_id",
+            "pct_change_effect_size_x" : "pct_change_effect_size", # fix original colname
+            "pct_change_effect_size_y" : "singleton_pct_change_effect_size",
+            "n_nonzero_trt" : "singleton_n_nonzero_trt",
+            "n_nonzero_cntrl" : "singleton_n_nonzero_cntrl",
+            "standard_error_pct_change_x" : "standard_error_pct_change", # fix original colname
+            "standard_error_pct_change_y" : "singleton_standard_error_pct_change"
+        })
+    
+        return merged
+
+    def format_merged_singleton_guides(df_results, df_ref, n):
+        """
+        Helper method to format and append statistics and feature columns of the n-th best
+        performing guide.
+        """
+        l = f"singleton_g{n + 1}"                # label
+        m = "element_gene_pair_identifier_hg38" # mapper
+        df_ref = df_ref.copy().groupby(m).nth(n).set_index(m)
+
+        df_results[f"{l}_guide_id"] = df_results[m].map(df_ref["grna_id"])
+        df_results[f"{l}_counts_trt"] = df_results[m].map(df_ref["singleton_n_nonzero_trt"])
+        df_results[f"{l}_counts_ctl"] = df_results[m].map(df_ref["singleton_n_nonzero_cntrl"])
+        df_results[f"{l}_pctchange_effect_size"] = df_results[m].map(df_ref["singleton_pct_change_effect_size"])
+        df_results[f"{l}_pctchange_stderror"] = df_results[m].map(df_ref["singleton_standard_error_pct_change"])
+        df_results[f"{l}_pctchange_ci_interval"] = df_results[m].map(df_ref["singleton_standard_error_pct_change"] * 1.96)
+
+        # TODO Add Summary Column
+    
+
+    def get_nth_performing_guide(df_merged, n, is_negative_direction):
+        """
+        Helper method to fetch n-th best performing guide with respect to
+        direction of effect.
+        """
+        df_merged = df_merged.copy()
+        is_ascending = True
+
+        if is_negative_direction:
+            df_merged = df_merged.loc[df_merged["pct_change_effect_size"] < 0 ]
+        else:
+            df_merged = df_merged.loc[df_merged["pct_change_effect_size"] > 0 ]
+            is_ascending = False
+    
+        # Pre-process merged df. Sorts guides by singleton % change effect size
+        df_nth_guide_features = (
+            df_merged
+                .sort_values(
+                    [
+                        "element_gene_pair_identifier_hg38",
+                        "singleton_pct_change_effect_size"
+                    ],
+                    ascending = is_ascending
+                ).groupby("element_gene_pair_identifier_hg38")[[
+                    "element_gene_pair_identifier_hg38",
+                    "grna_id",
+                    "singleton_n_nonzero_trt",
+                    "singleton_n_nonzero_cntrl",
+                    "singleton_pct_change_effect_size",
+                    "singleton_standard_error_pct_change"
+                ]].head(n)
+        )
+    
+        return df_nth_guide_features
+
+    def get_singletonfeatures(df, df_singleton, n = 3):
+        """
+        Function to get singleton features for each E-G pair.
+        Features to get are the top 3 best performing guide 
+        (by % change effect size and direction of effect) and 
+        their associated statistics.
+
+        Singleton results referenced was analyzed using SCEPTRE tool.
+        See DC-TAP-seq Github for details.
+
+        Statistics/Feature Column
+        -------------------------
+        singleton_*_guide_id : The guide id of the n-th best performing guide.
+        singleton_*_guides : The total number of unique guide designed against a tested element. (NOT IMPLEMENTED)
+        singleton_*_counts_trt : The total number of nonzero treatment. (N cells where guide was detected)
+        singleton_*_counts_ctl : The total number of control treatment. (N cells where guide was not detected)
+        singleton_*_pctchange_effect_size : The percentage change effect size of the indicated single guide.
+        singleton_*_pctchange_stderror : The percentage change effect size standard error statistics of the 
+                                         indicated single guide.
+        singleton_*_pctchange_ci_interval : The percentage change effect size 95% confidence interval difference 
+                                            of the indicated single guide. (ci_interval = +/- 1.96 * stderr)
+                                        
+        Note
+        ----
+        * denotes n-th best performing guide. For example, "g1" is the best performing and "g3" is 3rd best performing guide.
+    
+        Parameters
+        ----------
+        df : an existing dataframe to append singleton features onto.
+        df_singleton : refers to DC-TAP-seq singleton guide differential expression analysis dataframe via SCEPTRE tool.
+        n : the n-th best performing singleton guide feature to fetch.
+
+        Returns
+        -------
+        Append results to an existing pre-defined dataframe.
+        """
+        df = df.copy()
+
+        # Merge Singleton annotations to Table_S3
+        df_merged = merge_singelton(df, df_singleton)
+    
+        # Get the n-th best performing guide for when direction of effect is neg/pos
+        df_nth_feat_neg = get_nth_performing_guide(df_merged, n, is_negative_direction=True)
+        df_nth_feat_pos = get_nth_performing_guide(df_merged, n, is_negative_direction=False)
+
+        # Concat both direction of effect guide features
+        df_nth_performing_guides = pd.concat([df_nth_feat_neg, df_nth_feat_pos])
+
+        # For each n-th guide, format and append singleton features to results dataframe
+        for i in range(n):
+            format_merged_singleton_guides(df, df_nth_performing_guides, i)
+    
+        # Return df with appended results
+        return df
+
+    df_test = get_singletonfeatures(preprocess(), wtc11_singleton)
+    mo.ui.dataframe(df_test)
+    return
+
+
+@app.cell
+def _(mo, wtc11_singleton):
+    mo.ui.dataframe(wtc11_singleton)
+    return
+
+
+@app.cell
+def _(mo, preprocess):
+    mo.ui.dataframe(preprocess())
     return
 
 
@@ -335,13 +498,6 @@ def _(df_cpm, plt):
     plt.hist(df_cpm_for_distplot.loc[:,"tpm_D0"], bins=100)
     plt.ylim(0,100)
     plt.show()
-    return
-
-
-@app.cell
-def _(mkbed, tbl_s3_preprocessed):
-    test_bed = mkbed(tbl_s3_preprocessed)
-    test_bed
     return
 
 
