@@ -24,6 +24,7 @@ def _(mo):
 
 @app.cell
 def _():
+    import re
     import subprocess
     from pathlib import Path
 
@@ -142,7 +143,7 @@ def _(BedTool, pd):
         "tRNA" : BedTool("data/2025-11-10/rmsk/tRNA.bed.gz"),
         "UNKNOWN" : BedTool("data/2025-11-10/rmsk/UNKNOWN.bed.gz")
     }
-    return rmsk_dict, tbl_s3, wtc11_singleton
+    return rmsk_dict, tbl_s3
 
 
 @app.cell(hide_code=True)
@@ -261,10 +262,10 @@ def _(mkbed, rmsk_dict):
 
 
 @app.cell
-def _(mo, pd, preprocess, wtc11_singleton):
+def _(pd):
     # Function to add Singleton features
 
-    def merge_singelton(df_s3, df_sing):
+    def merge_singleton(df_s3, df_sing):
         """
         Helper method to merge singleton dataframe to table_s3 dataframe
         """
@@ -303,25 +304,6 @@ def _(mo, pd, preprocess, wtc11_singleton):
     
         return merged
 
-    def format_merged_singleton_guides(df_results, df_ref, n):
-        """
-        Helper method to format and append statistics and feature columns of the n-th best
-        performing guide.
-        """
-        l = f"singleton_g{n + 1}"                # label
-        m = "element_gene_pair_identifier_hg38" # mapper
-        df_ref = df_ref.copy().groupby(m).nth(n).set_index(m)
-
-        df_results[f"{l}_guide_id"] = df_results[m].map(df_ref["grna_id"])
-        df_results[f"{l}_counts_trt"] = df_results[m].map(df_ref["singleton_n_nonzero_trt"])
-        df_results[f"{l}_counts_ctl"] = df_results[m].map(df_ref["singleton_n_nonzero_cntrl"])
-        df_results[f"{l}_pctchange_effect_size"] = df_results[m].map(df_ref["singleton_pct_change_effect_size"])
-        df_results[f"{l}_pctchange_stderror"] = df_results[m].map(df_ref["singleton_standard_error_pct_change"])
-        df_results[f"{l}_pctchange_ci_interval"] = df_results[m].map(df_ref["singleton_standard_error_pct_change"] * 1.96)
-
-        # TODO Add Summary Column
-    
-
     def get_nth_performing_guide(df_merged, n, is_negative_direction):
         """
         Helper method to fetch n-th best performing guide with respect to
@@ -357,6 +339,44 @@ def _(mo, pd, preprocess, wtc11_singleton):
     
         return df_nth_guide_features
 
+    def format_merged_singleton_guides(df_results, df_ref, n):
+        """
+        Helper method to format and append statistics and feature columns of the n-th best
+        performing guide.
+        """
+        l = f"singleton_g{n + 1}"               # label
+        m = "element_gene_pair_identifier_hg38" # mapper
+        df_ref = df_ref.copy().groupby(m).nth(n).set_index(m)
+
+        df_results[f"{l}_guide_id"] = df_results[m].map(df_ref["grna_id"])
+        df_results[f"{l}_counts_trt"] = df_results[m].map(df_ref["singleton_n_nonzero_trt"])
+        df_results[f"{l}_counts_ctl"] = df_results[m].map(df_ref["singleton_n_nonzero_cntrl"])
+        df_results[f"{l}_pctchange_effect_size"] = df_results[m].map(df_ref["singleton_pct_change_effect_size"].round(2))
+        df_results[f"{l}_pctchange_stderror"] = df_results[m].map(df_ref["singleton_standard_error_pct_change"].round(2))
+        df_results[f"{l}_pctchange_ci_interval"] = df_results[m].map(
+            round(df_ref["singleton_standard_error_pct_change"] * 1.96, 2)
+        )
+
+    def format_merged_singleton_guides_summary_columns(df_results):
+        """
+        Helper method to format singleton guide stats in a single summary column.
+        """
+        sl = f"summary_singleton" # summary label
+
+        # Select singleton columns
+        cols = [c for c in df_results.columns if c.startswith("singleton_g")]
+
+        # Group columns
+        groups = {}
+        for c in cols:
+            stats = c.split("_", 2)[-1]
+            groups.setdefault(stats, []).append(c)
+
+        # Build summary columns
+        for stats, cols in groups.items():
+            summary_col = f"{sl}_{stats}"
+            df_results[summary_col] = df_results[cols].astype(str).agg(", ".join, axis=1)
+
     def get_singletonfeatures(df, df_singleton, n = 3):
         """
         Function to get singleton features for each E-G pair.
@@ -381,7 +401,8 @@ def _(mo, pd, preprocess, wtc11_singleton):
                                         
         Note
         ----
-        * denotes n-th best performing guide. For example, "g1" is the best performing and "g3" is 3rd best performing guide.
+        * denotes n-th best performing guide. For example, "g1" is the best performing and 
+          "g3" is 3rd best performing guide.
     
         Parameters
         ----------
@@ -396,7 +417,7 @@ def _(mo, pd, preprocess, wtc11_singleton):
         df = df.copy()
 
         # Merge Singleton annotations to Table_S3
-        df_merged = merge_singelton(df, df_singleton)
+        df_merged = merge_singleton(df, df_singleton)
     
         # Get the n-th best performing guide for when direction of effect is neg/pos
         df_nth_feat_neg = get_nth_performing_guide(df_merged, n, is_negative_direction=True)
@@ -408,24 +429,9 @@ def _(mo, pd, preprocess, wtc11_singleton):
         # For each n-th guide, format and append singleton features to results dataframe
         for i in range(n):
             format_merged_singleton_guides(df, df_nth_performing_guides, i)
+        format_merged_singleton_guides_summary_columns(df)
     
-        # Return df with appended results
         return df
-
-    df_test = get_singletonfeatures(preprocess(), wtc11_singleton)
-    mo.ui.dataframe(df_test)
-    return
-
-
-@app.cell
-def _(mo, wtc11_singleton):
-    mo.ui.dataframe(wtc11_singleton)
-    return
-
-
-@app.cell
-def _(mo, preprocess):
-    mo.ui.dataframe(preprocess())
     return
 
 
