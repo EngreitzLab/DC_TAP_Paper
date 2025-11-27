@@ -40,7 +40,13 @@ def _():
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""## Main Notebook""")
+    mo.md(
+        r"""
+    ## Main Notebook
+
+    See **Run Scripts & Functions** section for main notebook code execuation, analysis & results.
+    """
+    )
     return
 
 
@@ -50,9 +56,18 @@ def _(mo):
         r"""
     ### Download data
 
-    Required Files:
+    Files dependencies:
     1. DC-TAP-seq Paper Table S3
-    2. WTC11 Singleton Analysis Result TSV
+    2. [Optional] WTC11 Singleton Analysis Result TSV
+    3. [Optional] Gencode v44 GTF
+    4. [Recommended] WTC11 10X 3'-scRNA-seq TF-Perturb Processed CPM CSV
+    5. [Optional] RepeatMasker bed files
+
+    **Note** for optional/recommended files that were not downloaded, see the `process()` 
+    function to remove/comment out lines that would have required the indicated files.
+    Ultimately, only the files from (1) and (4) were used to curate the validation targets
+    to generate a _modifed Table S3_ which subsets on the significant WTC11 DE-G pairs taken forward
+    for validation experiments.
 
     Download Table S3 from [DC-TAP-seq Paper Preprint Supplementary](https://doi.org/10.1101/2025.09.16.676677). 
     Or for convenience, use the `CMD` snippet below at `validation` root directory to download Table S3 from 
@@ -84,32 +99,15 @@ def _(mo):
     mkdir -p data/2025-11-14/2022-06-25-wtc11-tfperturbseq-ref
     curl "https://mitra.stanford.edu/engreitz/oak/public/RayJagoda2024/DC-TAPseq/validations/WTC11/resources/2022-06-25-wtc11-tfperturbseq-ref/CIRM_villages_hepatic_neuronal_120121_TPM_tables_WTC11_avg_geneTPM_by_day.parquet.csv" -o data/2025-11-14/wtc11-tfperturbseq-ref-avg-cpm-by-day.csv
     ```
+
+    To download RepeatMasker References, see the comment below.
+    ```markdown
+    For this analysis, repeatmasker bed files were obtained from
+    Broad Institute's IGV public database. Find the referenced files at
+    https://data.broadinstitute.org/igvdata/annotations/hg38/rmsk/{*.bed.gz}
+    ```
     """
     )
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""### Constants""")
-    return
-
-
-@app.cell
-def _():
-    CORELIST = [
-        "element_gene_pair_identifier_hg38",
-        "pct_change_effect_size",
-    #     "largest_singleton_pct_change_effect_size",
-        "distance_to_gencode_gene_TSS",
-        "direct_rate_negative",
-        "element_category",
-        "ubiq_category",
-    #    "gencode_v44_coding_overlap",
-        "gencode_protein_coding_gene_body_overlap"
-    #    "overlapping_exon",
-    #    "rmsk_nearby"
-    ]
     return
 
 
@@ -121,7 +119,7 @@ def _(mo):
 
 @app.cell
 def _(BedTool, Path, pd):
-    tbl_s3 = pd.read_csv(
+    raw_tbl_s3 = pd.read_csv(
         "data/2025-11-14/dctapseq-tables3-wtc11.tsv", 
         sep="\t",
         dtype={
@@ -129,7 +127,7 @@ def _(BedTool, Path, pd):
         }
     )
 
-    wtc11_singleton = pd.read_csv(
+    raw_wtc11_singleton = pd.read_csv(
         "data/2025-11-14/wtc11-singleton.tsv",
         sep="\t",
         dtype={
@@ -137,7 +135,7 @@ def _(BedTool, Path, pd):
         }
     )
 
-    wtc11_tfperturb = pd.read_csv(
+    raw_wtc11_tfperturb = pd.read_csv(
         "data/2025-11-14/wtc11-tfperturbseq-ref-avg-cpm-by-day.csv"
     ).loc[:, ["gene_symbol", "D0"]]
 
@@ -165,7 +163,7 @@ def _(BedTool, Path, pd):
         "tRNA" : BedTool("data/2025-11-10/rmsk/tRNA.bed.gz"),
         "UNKNOWN" : BedTool("data/2025-11-10/rmsk/UNKNOWN.bed.gz")
     }
-    return rmsk_dict, tbl_s3, wtc11_singleton, wtc11_tfperturb
+    return raw_tbl_s3, raw_wtc11_singleton, raw_wtc11_tfperturb, rmsk_dict
 
 
 @app.cell(hide_code=True)
@@ -175,9 +173,9 @@ def _(mo):
 
 
 @app.cell
-def _(tbl_s3):
+def _(raw_tbl_s3):
     def preprocess():
-        df = tbl_s3.copy()
+        df = raw_tbl_s3.copy()
 
         # Filter for significant WTC11 E-G pairs. Include negative and positive % change effect sizes.
         df = df[
@@ -321,7 +319,7 @@ def _(pd):
             "standard_error_pct_change_x" : "standard_error_pct_change", # fix original colname
             "standard_error_pct_change_y" : "singleton_standard_error_pct_change"
         })
-    
+
         return merged
 
     def get_nth_performing_guide(df_merged, n, is_negative_direction):
@@ -337,7 +335,7 @@ def _(pd):
         else:
             df_merged = df_merged.loc[df_merged["pct_change_effect_size"] > 0 ]
             is_ascending = False
-    
+
         # Pre-process merged df. Sorts guides by singleton % change effect size
         df_nth_guide_features = (
             df_merged
@@ -356,7 +354,7 @@ def _(pd):
                     "singleton_standard_error_pct_change"
                 ]].head(n)
         )
-    
+
         return df_nth_guide_features
 
     def format_merged_singleton_guides(df_results, df_ref, n):
@@ -418,12 +416,12 @@ def _(pd):
                                          indicated single guide.
         singleton_*_pctchange_ci_interval : The percentage change effect size 95% confidence interval difference 
                                             of the indicated single guide. (ci_interval = +/- 1.96 * stderr)
-                                        
+
         Note
         ----
         * denotes n-th best performing guide. For example, "g1" is the best performing and 
           "g3" is 3rd best performing guide.
-    
+
         Parameters
         ----------
         df : an existing dataframe to append singleton features onto.
@@ -438,7 +436,7 @@ def _(pd):
 
         # Merge Singleton annotations to Table_S3
         df_merged = merge_singleton(df, df_singleton)
-    
+
         # Get the n-th best performing guide for when direction of effect is neg/pos
         df_nth_feat_neg = get_nth_performing_guide(df_merged, n, is_negative_direction=True)
         df_nth_feat_pos = get_nth_performing_guide(df_merged, n, is_negative_direction=False)
@@ -450,7 +448,7 @@ def _(pd):
         for i in range(n):
             format_merged_singleton_guides(df, df_nth_performing_guides, i)
         format_merged_singleton_guides_summary_columns(df)
-    
+
         return df
     return (get_singletonfeatures,)
 
@@ -460,14 +458,14 @@ def _(BedTool, Path, mkbed, subprocess):
     # A set of functions to get overlapping exons from GENCODE v44 
     def get_wtc11_exon_overlaps(df, gtf):
         """
-        Work in progress.
+        DO NOT USE: Work in progress.
         """
         df = df.copy()
         file = Path(gtf.stem).stem
         path = Path(f"{gtf.parent}/{file}.exon.bed")
         m = "element_gene_pair_identifier_hg38" # mapper
         o = "gencode_v44_exon_overlaps"         # overlaps
-    
+
         # Filter GTF for exons and make BedTool object
         if not path.exists():
             exon_bed = subprocess.check_output(
@@ -486,7 +484,7 @@ def _(BedTool, Path, mkbed, subprocess):
         overlaps = overlaps.to_dataframe(header=None, usecols=[3, 9])
         overlaps = overlaps.rename(columns={3: m, 9: o})
         overlaps = overlaps.drop_duplicates(subset=[m, o])
-    
+
         # Aggregate multiple exon overlaps per pair
         agg = (
             overlaps
@@ -496,20 +494,19 @@ def _(BedTool, Path, mkbed, subprocess):
 
         # Map to Table S3
         df[o] = df[m].map(agg)
-    
+
         return df
 
     def get_wtc11_simple_exon_overlaps(df):
         """
-        Placeholder for exon overlaps
+        Placeholder for exon overlaps until GENCODE v44 discrepancies issues are resolved.
         """
         df = df.copy()
         m = "gencode_protein_coding_gene_body_overlap" # mapper
         o = "overlapping_exon"                         # output result
-    
+
         df[o] = df[m].notna()
         return df
-
     return (get_wtc11_simple_exon_overlaps,)
 
 
@@ -539,7 +536,7 @@ def _(get_wtc11_simple_exon_overlaps):
 
         # Get exon overlaps
         df = get_wtc11_simple_exon_overlaps(df)
-    
+
         # Filter for pairs with overlapping exon
         overlaps = df.loc[:, [p,m,o]]
         overlaps = overlaps.loc[df[o] == True]
@@ -554,9 +551,15 @@ def _(get_wtc11_simple_exon_overlaps):
         # Map to Table S3
         df[r] = overlaps[m].map(agg)
         df["overlapping_exon_is_lowly_expressed"] = df[r].astype(float) < threshold
-    
+
         return df
     return (get_wtc11_gene_expression,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""### Processing Data""")
+    return
 
 
 @app.cell
@@ -564,9 +567,9 @@ def _(
     find_nearby_rmsk,
     get_singletonfeatures,
     get_wtc11_gene_expression,
+    raw_wtc11_singleton,
+    raw_wtc11_tfperturb,
     rmsk_dict,
-    wtc11_singleton,
-    wtc11_tfperturb,
 ):
     # Process
     def process(df):
@@ -577,10 +580,10 @@ def _(
             "element_category",
             "ubiq_category",
             "gencode_protein_coding_gene_body_overlap",
-            "overlapping_exon",
-            "overlapping_exon_cpm",
-            "overlapping_exon_is_lowly_expressed",
-            "rmsk_nearby",
+            "overlapping_exon", # Comment out if recommended files were not downloaded
+            "overlapping_exon_cpm", # Comment out if recommended files were not downloaded
+            "overlapping_exon_is_lowly_expressed", # Comment out if recommended files were not downloaded
+            "rmsk_nearby", # Comment out if optional repeatmasker files were not downloaded
             "direct_vs_indirect_negative"
         ]
 
@@ -588,18 +591,72 @@ def _(
         df = find_nearby_rmsk(df, rmsk_dict)
 
         # Get singleton features
-        df = get_singletonfeatures(df, wtc11_singleton)
+        df = get_singletonfeatures(df, raw_wtc11_singleton)
         # Select summary singleton columns
         singleton = [c for c in df.columns if c.startswith("summary_singleton")]
         CORELIST.extend(singleton)
 
         # Get overlapping exons and gene expression levels
-        df = get_wtc11_gene_expression(df, wtc11_tfperturb)
+        df = get_wtc11_gene_expression(df, raw_wtc11_tfperturb)
 
         # Format return full df and core df
         return df, df.loc[:, CORELIST]
-    
     return (process,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""### Custom functions to perform one-off tasks on Fully Processed Data""")
+    return
+
+
+@app.function
+def get_curated_validation_target_list(df, out):
+    """
+    One-off function to curate a list of 12 significant 
+    WTC11 DE-G pairs to validate in a low vs high MOI
+    DC-TAP-seq Validation Experiment as a head-to-head
+    comparison to address a concern with high MOI
+    confounding results with specific attention given
+    to discovered significant DE-G pairs with low effect sizes
+    (Median: -4.3% for the 66 WTC11 pairs).
+    """
+    df = df[
+        # All elements curated is less than 100kb
+        # The 4 element below were choosen because >abs(10) % change effect, no overlapping exon, <100kb
+        (df["element_gene_pair_identifier_hg38"] == "PCBP1|chr2:70089449-70089750") | 
+        (df["element_gene_pair_identifier_hg38"] == "HMGA1|chr6:34235537-34235838") | 
+        (df["element_gene_pair_identifier_hg38"] == "FAM111A|chr11:59158502-59158803") | 
+        (df["element_gene_pair_identifier_hg38"] == "CEBPB|chr20:50192829-50193130") | 
+
+        # The 2 elements below were choosen because >abs(10) % change effect, 
+        # overlapped exon is lowly expressed and <100kb
+        # MFSD3 is no K27ac marked (weak target for validation, could be removed if needed)
+        (df["element_gene_pair_identifier_hg38"] == "MFSD3|chr8:144511963-144512264") |
+        (df["element_gene_pair_identifier_hg38"] == "FOXH1|chr8:144472391-144472692") | 
+
+        # Direction of effect is negative
+        # SLC2A3 & TP53 locus plot were highlighted in the paper 
+        (df["element_gene_pair_identifier_hg38"] == "SLC2A3|chr12:7960676-7960977") | 
+        (df["element_gene_pair_identifier_hg38"] == "TP53|chr17:7656987-7657288") |
+
+        # Direction of effect is negative
+        # CFL1, overlapped exon is lowly expressed, K27me3 marked
+        (df["element_gene_pair_identifier_hg38"] == "CFL1|chr11:65355795-65356096") |
+
+        # Direction of effect is negative
+        # CTCF element
+        # CFL1, overlapped exon is lowly expressed
+        (df["element_gene_pair_identifier_hg38"] == "CDC37|chr19:10390714-10391015") |
+        (df["element_gene_pair_identifier_hg38"] == "RPL8|chr8:144805052-144805353") |
+
+        # Direction of effect is negative, overlapped exon is lowly expressed, no K27ac marked
+        (df["element_gene_pair_identifier_hg38"] == "PIMREG|chr17:6455432-6455733")
+    ]
+
+    df.to_csv(out, sep="\t",index=False)
+
+    return df
 
 
 @app.cell(hide_code=True)
@@ -610,9 +667,33 @@ def _(mo):
 
 @app.cell
 def _(preprocess, process):
-    tbl_s3_preprocessed = preprocess()
-    tbl_s3_processed, tbl_s3_processed_summary = process(tbl_s3_preprocessed)
-    return (tbl_s3_processed_summary,)
+    ### Main ###
+    df_intermediate = preprocess()
+    df_main, df_main_summary = process(df_intermediate)
+
+    ### Save Formatted Tables ###
+    # Full Table S3 columns
+    df_main.to_csv(
+        "results/2025-11-14/lowMOIvshighMOI-Validation-Experiment/" + 
+        "2025-11-20-dctapseq-validation-wtc11-sig-egpairs-table-s3.tsv",
+        sep="\t",
+        index=False
+    )
+
+    # Full Table (1st Pass low-v-high-MOI valid exp: 12 elements)
+    _ = get_curated_validation_target_list(
+        df_main,
+        out = "results/2025-11-14/lowMOIvshighMOI-Validation-Experiment/" + 
+              "2025-11-20-dctapseq-validation-wtc11-low-v-high-moi-table-s3.tsv"
+    )
+
+    # Summary Table (1st Pass low-v-high-MOI valid exp: 12 elements)
+    _ = get_curated_validation_target_list(
+        df_main_summary,
+        out = "results/2025-11-14/lowMOIvshighMOI-Validation-Experiment/" + 
+              "2025-11-20-dctapseq-validation-wtc11-low-v-high-moi-summary.tsv"
+    )
+    return (df_main_summary,)
 
 
 @app.cell(hide_code=True)
@@ -622,72 +703,72 @@ def _(mo):
 
 
 @app.cell
-def _(mo, tbl_s3_processed_summary):
+def _(df_main_summary, mo):
     # Show all 99 sig pairs.
-    mo.ui.dataframe(tbl_s3_processed_summary)
+    mo.ui.dataframe(df_main_summary)
     return
 
 
 @app.cell
-def _(mo, tbl_s3_processed_summary):
+def _(df_main_summary, mo):
     # Filtering for CTCF element category and look at largest magnitude % pct change eff. size
     mo.ui.dataframe(
-        tbl_s3_processed_summary[
-            (tbl_s3_processed_summary["pct_change_effect_size"] > 10) |
-            (tbl_s3_processed_summary["pct_change_effect_size"] < -10)
+        df_main_summary[
+            (df_main_summary["pct_change_effect_size"] > 10) |
+            (df_main_summary["pct_change_effect_size"] < -10)
         ]
     )
     return
 
 
 @app.cell
-def _(mo, tbl_s3_processed_summary):
+def _(df_main_summary, mo):
     # Filter for the best validation targets
     mo.ui.dataframe(
-        tbl_s3_processed_summary[
-            (tbl_s3_processed_summary["pct_change_effect_size"] < -10) & 
-            (tbl_s3_processed_summary["distance_to_gencode_gene_TSS"] < 100000) & 
-            (tbl_s3_processed_summary["overlapping_exon"] == False)
+        df_main_summary[
+            (df_main_summary["pct_change_effect_size"] < -10) & 
+            (df_main_summary["distance_to_gencode_gene_TSS"] < 100000) & 
+            (df_main_summary["overlapping_exon"] == False)
         ]
     )
     return
 
 
 @app.cell
-def _(mo, tbl_s3_processed_summary):
+def _(df_main_summary, mo):
     # This list is for low-MOI vs high-MOI DC-TAP-seq validation experiment
     mo.ui.dataframe(
-        tbl_s3_processed_summary[
+        df_main_summary[
             # All elements curated is less than 100kb
             # The 4 element below were choosen because >abs(10) % change effect, no overlapping exon, <100kb
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "PCBP1|chr2:70089449-70089750") | 
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "HMGA1|chr6:34235537-34235838") | 
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "FAM111A|chr11:59158502-59158803") | 
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "CEBPB|chr20:50192829-50193130") | 
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "PCBP1|chr2:70089449-70089750") | 
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "HMGA1|chr6:34235537-34235838") | 
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "FAM111A|chr11:59158502-59158803") | 
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "CEBPB|chr20:50192829-50193130") | 
 
             # The 2 elements below were choosen because >abs(10) % change effect, 
             # overlapped exon is lowly expressed and <100kb
             # MFSD3 is no K27ac marked (weak target for validation, could be removed if needed)
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "MFSD3|chr8:144511963-144512264") |
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "FOXH1|chr8:144472391-144472692") | 
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "MFSD3|chr8:144511963-144512264") |
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "FOXH1|chr8:144472391-144472692") | 
 
             # Direction of effect is negative
             # SLC2A3 & TP53 locus plot were highlighted in the paper 
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "SLC2A3|chr12:7960676-7960977") | 
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "TP53|chr17:7656987-7657288") |
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "SLC2A3|chr12:7960676-7960977") | 
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "TP53|chr17:7656987-7657288") |
 
             # Direction of effect is negative
             # CFL1, overlapped exon is lowly expressed, K27me3 marked
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "CFL1|chr11:65355795-65356096") |
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "CFL1|chr11:65355795-65356096") |
 
             # Direction of effect is negative
             # CTCF element
             # CFL1, overlapped exon is lowly expressed
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "CDC37|chr19:10390714-10391015") |
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "RPL8|chr8:144805052-144805353") |
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "CDC37|chr19:10390714-10391015") |
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "RPL8|chr8:144805052-144805353") |
 
             # Direction of effect is negative, overlapped exon is lowly expressed, no K27ac marked
-            (tbl_s3_processed_summary["element_gene_pair_identifier_hg38"] == "PIMREG|chr17:6455432-6455733")
+            (df_main_summary["element_gene_pair_identifier_hg38"] == "PIMREG|chr17:6455432-6455733")
         ]
     )
     return
