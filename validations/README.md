@@ -18,13 +18,33 @@ the analysis that generated them.
 
 ### Software Dependencies
 
-| Software | Version  |
-| -------- | -------- |
-| python   | ≥ 3.12   |
-| bedtools | ≥ 2.31.1 |
-| blat     | ≥ 35     |
+| Software         | Version  |
+| ---------------- | -------- |
+| python           | ≥ 3.12   |
+| bedtools         | ≥ 2.31.1 |
+| blat             | ≥ 35     |
+| bedgraphtobigwig | ≥ 377    |
+| bigwigtobedgraph | ≥ 377    |
+| fetchchromsizes  | ≥ 377    |
 
 ### Environment Setup
+
+For installing the software dependencies listed above,
+consider using a conda environment to manage bioinformatic related
+software tools. Alternatively, visit
+[UCSC's Utilities Downloads page]("https://hgdownload.soe.ucsc.edu/downloads.html#utilities_downloads")
+to download the required software binary files independent of a
+package manager.
+
+```bash
+conda create -y -n dctap-valid-env \
+  python=3.12 bedtools \
+  ucsc-bedgraphtobigwig \
+  ucsc-bigwigtobedgraph \
+  ucsc-fetchchromsizes \
+  zlib make cython \
+  -c conda-forge -c bioconda
+```
 
 It is recommended to use a Python virtual environment.  
 To create and activate an environment and install the required libraries:
