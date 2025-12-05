@@ -16,6 +16,12 @@ def _(mo):
         r"""
     # DC-TAP-seq CTCF Element Further Analysis Notebook
 
+    > :warning: **DEPRECATED:** This notebook is mostly exploratory and
+    > is not expected to run smoothly out of the box or be optimized for
+    > readability and code quality . See
+    > `analyses/2025-12-04/element-category-profile-analysis.py` for the
+    > clean version of this notebook's core analysis.
+
     This notebook explores the significant WTC11 DE-G pairs where the assigned element 
     category is "CTCF Element".
 
@@ -125,7 +131,7 @@ def _(mo):
     - Target: H3K27ac
     - Nucleic acid type: DNA
     - Platform: Illumina NextSeq 500
-    - Accession Data File: ENCFF573DHK
+    - Accession Data File: ENCFF306ZMK
     - Filetype: bigWig
 
     CTCF
@@ -137,7 +143,7 @@ def _(mo):
     - Target: CTCF
     - Nucleic acid type: DNA
     - Platform: Illumina NextSeq 500
-    - Accession Data File: ENCFF974CGC
+    - Accession Data File: ENCFF619QDY
     - Filetype: bigWig
     """
     )
@@ -159,14 +165,25 @@ def _():
     # TO DELETE LATER
     TEST_GRNA_EFF_BD = "results/2025-11-14/2025-11-25-dctapseq-validation-wtc11-grna-pam-eff-testing.bed"
 
-    CTCF_BW = "data/encode/ENCFF974CGC.bigWig"
-    K27AC_BW = "data/encode/ENCFF573DHK.bigWig"
+    CTCF_BW = "data/encode/ENCFF619QDY.bigWig"
+    K27AC_BW = "data/encode/ENCFF306ZMK.bigWig"
     DNASE_BW = "data/encode/ENCFF736FHB.bigWig"
 
     DNASE_BM = "data/encode/ENCFF492WXQ.bam"
     MACS3_DS = "results/2025-11-14/macs-dnase/dnase_summits.bed"
     DNASE_SIG_SUMMITS = "results/2025-11-14/2025-11-25-dctapseq-validation-wtc11-sig-dnase-summits.bed"
-    return CTCF_BW, DNASE_BM, DNASE_BW, GRNA_EFF_BD, K27AC_BW, MACS3_DS
+
+    CTCF_MOTIFS_BD = "data/wtc11/wtc11_ctcf_motifs.bed"
+    CTCF_MOTIFS_BW = "data/wtc11/tmp_wtc11_ctcf-motif.bigwig"
+    return (
+        CTCF_BW,
+        CTCF_MOTIFS_BW,
+        DNASE_BM,
+        DNASE_BW,
+        GRNA_EFF_BD,
+        K27AC_BW,
+        MACS3_DS,
+    )
 
 
 @app.cell(hide_code=True)
@@ -400,7 +417,7 @@ def _preprocess(
                 "start": df["pamcoords_start"].astype(int),
                 "end": df["pamcoords_end"].astype(int),
                 "name": df["element_gene_pair_identifier_hg38"] + "|" + df["grna_id"],
-                "score": df["singleton_pct_change_effect_size"] / 100.0,
+                "score": df["singleton_pct_change_effect_size"] * -1.0,
                 "strand": df["pamcoords_strand"],
                 "thickStart": ".",
                 "thickEnd": ".",
@@ -524,8 +541,8 @@ def _(
         # Merge for minimal intervals to make 1bp interval
         bed = (
             BedTool(MACS3_DS)
-                .intersect(bed, wa=True)
                 .slop(genome="hg38", l=viewport, r=viewport)
+                .intersect(bed, wa=True)
                 .merge().saveas(dir / fbed_merged)
         )
 
@@ -601,6 +618,7 @@ def _(
             "-bs", "1",
             "--averageTypeBins", "mean",
             "--skipZeros",
+            "--missingDataAsZero",
             "-o", o,
             "-R"
         ])
@@ -661,7 +679,6 @@ def _(
         deeptools_computeMatrix,
         deeptools_plotProfiles,
         fetch_chromsizes,
-        fetch_encode_data,
         get_deeptools_references,
         get_macs3_dnase_summits,
         make_grna_bigwig,
@@ -755,7 +772,7 @@ def _(Path, cs, fetch_chromsizes, subprocess):
 
         done.touch()
         return out_bws
-    return (normalize_bigwig,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -811,23 +828,42 @@ def _(mo):
 
 
 @app.cell
-def _(fetch_encode_data, preprocess):
+def _(preprocess):
     dfi = preprocess()
     dfi_ctcf = dfi.copy()[dfi["element_category"].str.contains("CTCF")].reset_index(drop=True)
-    fetch_encode_data()
+    dfi_ctcf = dfi_ctcf[dfi_ctcf["pct_change_effect_size"] < 0].reset_index(drop=True)
+    # fetch_encode_data()
     return dfi, dfi_ctcf
 
 
 @app.cell
 def _(dfi):
     dfi_h3k27ac = dfi.copy()[dfi["element_category"].eq("H3K27ac")].reset_index(drop=True)
-    return (dfi_h3k27ac,)
+    return
+
+
+@app.cell
+def _(BedTool, fetch_chromsizes, pd, subprocess):
+    # Add WTC11 CTCF Motif bigwig track
+    def make_ctcf_motif_bigwig(bed):
+        fout_bedgraph = "results/2025-11-14/ctcf-analysis-plots/2025-12-04-crispri-meeting-manual/tmp/ctcf-motif.bedGraph"
+        fout_bigwig = "results/2025-11-14/ctcf-analysis-plots/2025-12-04-crispri-meeting-manual/tmp/ctcf-motif.bigwig"
+    
+        bed = pd.read_csv(bed, sep="\t", header=None).loc[:, [0, 1, 2, 4]]
+        bed = BedTool.from_dataframe(bed).merge(c=4, o="max").saveas(fout_bedgraph)
+        chromsizes = fetch_chromsizes("hg38")
+        subprocess.run([
+            "bedGraphToBigWig", f"{fout_bedgraph}", chromsizes, f"{fout_bigwig}"
+        ])
+
+    # make_ctcf_motif_bigwig(CTCF_MOTIFS_BD)
+    return
 
 
 @app.cell
 def _(GRNA_EFF_BD, get_macs3_dnase_summits, make_grna_bigwig):
     dt_grnaeff_150bp =  make_grna_bigwig(GRNA_EFF_BD, 150)
-    dt_grnaeff_250bp =  make_grna_bigwig(GRNA_EFF_BD, 250)
+    dt_grnaeff_250bp =  make_grna_bigwig(GRNA_EFF_BD, 25)
     get_macs3_dnase_summits()
     return dt_grnaeff_150bp, dt_grnaeff_250bp
 
@@ -848,18 +884,19 @@ def _(dfi_ctcf, get_deeptools_references):
 
 
 @app.cell
-def _(CTCF_BW, DNASE_BW, K27AC_BW, normalize_bigwig):
-    minmax_normalized_bigwigs = normalize_bigwig(
-        inputs = [CTCF_BW, K27AC_BW, DNASE_BW],
-        method = "max-min",
-        outdir = "results/2025-11-14/dt-intermediates/"
-    )
-    return (minmax_normalized_bigwigs,)
+def _():
+    # minmax_normalized_bigwigs = normalize_bigwig(
+    #     inputs = [CTCF_BW, K27AC_BW, DNASE_BW],
+    #     method = "max-min",
+    #     outdir = "results/2025-11-14/dt-intermediates/"
+    # )
+    return
 
 
 @app.cell
 def _(
     CTCF_BW,
+    CTCF_MOTIFS_BW,
     DNASE_BW,
     K27AC_BW,
     deeptools_computeMatrix,
@@ -867,68 +904,67 @@ def _(
     dt_grnaeff_250bp,
     dt_references_ctcf_elements,
     dt_references_ctcf_elements_agg,
-    minmax_normalized_bigwigs,
 ):
     dt_mtx_150bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp"
     m1 = deeptools_computeMatrix(
         b=1000, 
         R=dt_references_ctcf_elements, 
-        S=[dt_grnaeff_150bp, CTCF_BW, K27AC_BW, DNASE_BW], 
+        S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW], 
         o=dt_mtx_150bp + ".gz",
     )
 
-    dt_mtx_minmaxnorm_150bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp.minmax.norm"
-    minmax_norm_150 = [dt_grnaeff_150bp]
-    minmax_norm_150.extend(minmax_normalized_bigwigs)
-    m2 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_ctcf_elements, 
-        S=minmax_norm_150, 
-        o=dt_mtx_minmaxnorm_150bp + ".gz",
-    )
-
-    dt_mtx_minmaxnorm_150n250bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp-250bp.minmax.norm"
-    minmax_norm_150n250 = [dt_grnaeff_150bp, dt_grnaeff_250bp]
-    minmax_norm_150n250.extend(minmax_normalized_bigwigs)
-    m3 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_ctcf_elements, 
-        S=minmax_norm_150n250, 
-        o=dt_mtx_minmaxnorm_150n250bp + ".gz",
-    )
-
-
-    dt_mtx_minmaxnorm_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp-250bp.minmax.norm.agg"
-    m4 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_ctcf_elements_agg, 
-        S=minmax_norm_150n250, 
-        o=dt_mtx_minmaxnorm_150n250bp_agg + ".gz",
-    )
-
-
-    dt_mtx_minmaxnorm_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp-250bp.agg"
+    # dt_mtx_minmaxnorm_150bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp.minmax.norm"
+    # minmax_norm_150 = [dt_grnaeff_150bp]
+    # minmax_norm_150.extend(minmax_normalized_bigwigs)
+    # m2 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_ctcf_elements, 
+    #     S=minmax_norm_150, 
+    #     o=dt_mtx_minmaxnorm_150bp + ".gz",
+    # )
+    # 
+    # dt_mtx_minmaxnorm_150n250bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp-250bp.minmax.norm"
+    # minmax_norm_150n250 = [dt_grnaeff_150bp, dt_grnaeff_250bp]
+    # minmax_norm_150n250.extend(minmax_normalized_bigwigs)
+    # m3 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_ctcf_elements, 
+    #     S=minmax_norm_150n250, 
+    #     o=dt_mtx_minmaxnorm_150n250bp + ".gz",
+    # )
+    # 
+    # 
+    # dt_mtx_minmaxnorm_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp-250bp.minmax.norm.agg"
+    # m4 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_ctcf_elements_agg, 
+    #     S=minmax_norm_150n250, 
+    #     o=dt_mtx_minmaxnorm_150n250bp_agg + ".gz",
+    # )
+    # 
+    # 
+    dt_mtx_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-150bp-250bp.agg"
     m4_4 = deeptools_computeMatrix(
         b=1000, 
         R=dt_references_ctcf_elements_agg, 
-        S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW], 
-        o=dt_mtx_minmaxnorm_150n250bp_agg + ".gz",
+        S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW, CTCF_MOTIFS_BW], 
+        o=dt_mtx_150n250bp_agg + ".gz",
     )
 
-    return m1, m2, m3, m4, m4_4, minmax_norm_150n250
+    return m1, m4_4
 
 
 @app.cell
-def _(deeptools_plotProfiles, dt_references_ctcf_elements, m1, m2, m3, m4_4):
+def _(deeptools_plotProfiles, dt_references_ctcf_elements, m1, m4_4):
     p_dir = "results/2025-11-14/ctcf-analysis-plots/"
     deeptools_plotProfiles(
         m1, 
         o=p_dir + "grna-eff-vs-dhs-summit-mtx-150bp.png",
         perGroup=True,
-        rename=["sgRNA-effect", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#71b0b3", "#e69533", "#4b79ba"],
+        rename=["sgRNA-effect (150bp)", "sgRNA-effect (25bp)", "CTCF","H3K27ac", "DNase"],
+        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
         refPointLabel="DHS Summit",
-        yAxisLabel="Raw Signal",
+        yAxisLabel="Normalized Signal",
         nPlots=len(dt_references_ctcf_elements)
     )
 
@@ -936,211 +972,186 @@ def _(deeptools_plotProfiles, dt_references_ctcf_elements, m1, m2, m3, m4_4):
         m4_4, 
         o=p_dir + "grna-eff-vs-dhs-summit-mtx-150bp-250bp.agg.png",
         perGroup=True,
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+        rename=["sgRNA-effect (150bp)", "sgRNA-effect (25bp)", "CTCF", "H3K27ac", "DNase", "CTCF Motifs"],
+        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba", "#4F7B7D"],
         refPointLabel="DHS Summit",
-        yAxisLabel="Raw Signal",
+        yAxisLabel="Normalized Signal",
         nPlots=len(dt_references_ctcf_elements)
     )
-
-    deeptools_plotProfiles(
-        m2, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-150bp.minmax.norm.png",
-        perGroup=True,
-        rename=["sgRNA-effect", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Min-Max Normalized Signal",
-        nPlots=len(dt_references_ctcf_elements)
-    )
-
-    deeptools_plotProfiles(
-        m3, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-150bp-250bp.minmax.norm.png",
-        perGroup=True,
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Min-Max Normalized Signal",
-        nPlots=len(dt_references_ctcf_elements)
-    )
-    return (p_dir,)
+    # 
+    # deeptools_plotProfiles(
+    #     m2, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-150bp.minmax.norm.png",
+    #     perGroup=True,
+    #     rename=["sgRNA-effect", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Min-Max Normalized Signal",
+    #     nPlots=len(dt_references_ctcf_elements)
+    # )
+    # 
+    # deeptools_plotProfiles(
+    #     m3, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-150bp-250bp.minmax.norm.png",
+    #     perGroup=True,
+    #     rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Min-Max Normalized Signal",
+    #     nPlots=len(dt_references_ctcf_elements)
+    # )
+    return
 
 
 @app.cell
-def _(deeptools_plotProfiles, dt_references_ctcf_elements, m4, p_dir):
+def _():
     # Aggreated plots
-    deeptools_plotProfiles(
-        m4, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-150bp.minmax.norm.agg.png",
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Min-Max Normalized Signal",
-        nPlots=len(dt_references_ctcf_elements),
-    )
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""# TODO: Move the exploratory code below into a separate plotting script or a configurable pipeline (i.e. snakemake or nextflow).""")
+    # deeptools_plotProfiles(
+    #     m4, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-150bp.minmax.norm.agg.png",
+    #     rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Min-Max Normalized Signal",
+    #     nPlots=len(dt_references_ctcf_elements),
+    # )
     return
 
 
 @app.cell
-def _(
-    deeptools_computeMatrix,
-    deeptools_plotProfiles,
-    dfi,
-    get_deeptools_references,
-    minmax_norm_150n250,
-    p_dir,
-):
+def _():
     # all elements
-    dt_references_all_elements_outdir = "results/2025-11-14/dt-intermediates/refs_all_elements/"
-    dt_references_all_elements = get_deeptools_references(
-        dfi,
-        outdir=dt_references_all_elements_outdir,
-    )
-    dt_references_all_elements_agg = get_deeptools_references(
-        dfi,
-        outdir=dt_references_all_elements_outdir,
-        genPerRegions=False
-    )
-
-
-    dt_mtx_minmaxnorm_all_150n250bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-allpairs-150bp-250bp.minmax.norm"
-    m5 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_all_elements,
-        S=minmax_norm_150n250, 
-        o=dt_mtx_minmaxnorm_all_150n250bp + ".gz",
-    )
-    dt_mtx_minmaxnorm_all_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-allpairs-150bp-250bp.minmax.norm.agg"
-    m6 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_all_elements_agg, 
-        S=minmax_norm_150n250, 
-        o=dt_mtx_minmaxnorm_all_150n250bp_agg + ".gz",
-    )
-
-    deeptools_plotProfiles(
-        m5, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-all-150bp-250bp.minmax.norm.png",
-        perGroup=True,
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Min-Max Normalized Signal",
-        nPlots=len(dt_references_all_elements)
-    )
-    deeptools_plotProfiles(
-        m6, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-all-150bp-250bp.minmax.norm.agg.png",
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Min-Max Normalized Signal"
-    )
+    # dt_references_all_elements_outdir = "results/2025-11-14/dt-intermediates/refs_all_elements/"
+    # dt_references_all_elements = get_deeptools_references(
+    #     dfi,
+    #     outdir=dt_references_all_elements_outdir,
+    # )
+    # dt_references_all_elements_agg = get_deeptools_references(
+    #     dfi,
+    #     outdir=dt_references_all_elements_outdir,
+    #     genPerRegions=False
+    # )
+    # 
+    # 
+    # dt_mtx_minmaxnorm_all_150n250bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-allpairs-150bp-250bp.minmax.norm"
+    # m5 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_all_elements,
+    #     S=minmax_norm_150n250, 
+    #     o=dt_mtx_minmaxnorm_all_150n250bp + ".gz",
+    # )
+    # dt_mtx_minmaxnorm_all_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-allpairs-150bp-250bp.minmax.norm.agg"
+    # m6 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_all_elements_agg, 
+    #     S=minmax_norm_150n250, 
+    #     o=dt_mtx_minmaxnorm_all_150n250bp_agg + ".gz",
+    # )
+    # 
+    # deeptools_plotProfiles(
+    #     m5, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-all-150bp-250bp.minmax.norm.png",
+    #     perGroup=True,
+    #     rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Min-Max Normalized Signal",
+    #     nPlots=len(dt_references_all_elements)
+    # )
+    # deeptools_plotProfiles(
+    #     m6, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-all-150bp-250bp.minmax.norm.agg.png",
+    #     rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Min-Max Normalized Signal"
+    # )
     return
 
 
 @app.cell
-def _(
-    CTCF_BW,
-    DNASE_BW,
-    K27AC_BW,
-    deeptools_computeMatrix,
-    deeptools_plotProfiles,
-    dfi_h3k27ac,
-    dt_grnaeff_150bp,
-    dt_grnaeff_250bp,
-    get_deeptools_references,
-    minmax_norm_150n250,
-    p_dir,
-):
+def _():
     # h3k27ac elements
-    dt_references_h3k27ac_elements_outdir = "results/2025-11-14/dt-intermediates/refs_h3k27ac_elements/"
-    dt_references_h3k27ac_elements = get_deeptools_references(
-        dfi_h3k27ac,
-        outdir=dt_references_h3k27ac_elements_outdir,
-    )
-    dt_references_h3k27ac_elements_agg = get_deeptools_references(
-        dfi_h3k27ac,
-        outdir=dt_references_h3k27ac_elements_outdir,
-        genPerRegions=False
-    )
-
-    dt_mtx_minmaxnorm_h3k27ac_150n250bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-h3k27acpairs-150bp-250bp.minmax.norm"
-    m7 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_h3k27ac_elements,
-        S=minmax_norm_150n250, 
-        o=dt_mtx_minmaxnorm_h3k27ac_150n250bp + ".gz",
-    )
-    dt_mtx_minmaxnorm_h3k27ac_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-h3k27acpairs-150bp-250bp.minmax.norm.agg"
-    m8 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_h3k27ac_elements_agg, 
-        S=minmax_norm_150n250, 
-        o=dt_mtx_minmaxnorm_h3k27ac_150n250bp_agg + ".gz",
-    )
-
-
-    dt_mtx_raw_h3k27ac_150n250bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-h3k27acpairs-150bp-250bp.raw"
-    m9 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_h3k27ac_elements,
-        S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW], 
-        o=dt_mtx_raw_h3k27ac_150n250bp + ".gz",
-    )
-    dt_mtx_raw_h3k27ac_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-h3k27acpairs-150bp-250bp.raw.agg"
-    m10 = deeptools_computeMatrix(
-        b=1000, 
-        R=dt_references_h3k27ac_elements_agg, 
-        S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW], 
-        o=dt_mtx_raw_h3k27ac_150n250bp_agg + ".gz",
-    )
-
-    deeptools_plotProfiles(
-        m7, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-h3k27ac-150bp-250bp.minmax.norm.png",
-        perGroup=True,
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Min-Max Normalized Signal",
-        nPlots=len(dt_references_h3k27ac_elements)
-    )
-    deeptools_plotProfiles(
-        m8, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-h3k27ac-150bp-250bp.minmax.norm.agg.png",
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Min-Max Normalized Signal"
-    )
-
-    deeptools_plotProfiles(
-        m9, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-h3k27ac-150bp-250bp.raw.png",
-        perGroup=True,
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Raw Signal",
-        nPlots=len(dt_references_h3k27ac_elements)
-    )
-    deeptools_plotProfiles(
-        m10, 
-        o=p_dir + "grna-eff-vs-dhs-summit-mtx-h3k27ac-150bp-250bp.raw.agg.png",
-        rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
-        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
-        refPointLabel="DHS Summit",
-        yAxisLabel="Raw Signal"
-    )
-    return dt_references_h3k27ac_elements, dt_references_h3k27ac_elements_agg
+    # dt_references_h3k27ac_elements_outdir = "results/2025-11-14/dt-intermediates/refs_h3k27ac_elements/"
+    # dt_references_h3k27ac_elements = get_deeptools_references(
+    #     dfi_h3k27ac,
+    #     outdir=dt_references_h3k27ac_elements_outdir,
+    # )
+    # dt_references_h3k27ac_elements_agg = get_deeptools_references(
+    #     dfi_h3k27ac,
+    #     outdir=dt_references_h3k27ac_elements_outdir,
+    #     genPerRegions=False
+    # )
+    # 
+    # dt_mtx_minmaxnorm_h3k27ac_150n250bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-h3k27acpairs-150bp-250bp.minmax.norm"
+    # m7 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_h3k27ac_elements,
+    #     S=minmax_norm_150n250, 
+    #     o=dt_mtx_minmaxnorm_h3k27ac_150n250bp + ".gz",
+    # )
+    # dt_mtx_minmaxnorm_h3k27ac_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-h3k27acpairs-150bp-250bp.minmax.norm.agg"
+    # m8 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_h3k27ac_elements_agg, 
+    #     S=minmax_norm_150n250, 
+    #     o=dt_mtx_minmaxnorm_h3k27ac_150n250bp_agg + ".gz",
+    # )
+    # 
+    # 
+    # dt_mtx_raw_h3k27ac_150n250bp = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-h3k27acpairs-150bp-250bp.raw"
+    # m9 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_h3k27ac_elements,
+    #     S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW], 
+    #     o=dt_mtx_raw_h3k27ac_150n250bp + ".gz",
+    # )
+    # dt_mtx_raw_h3k27ac_150n250bp_agg = "results/2025-11-14/dt-intermediates/grna-eff-vs-dhs-summit-mtx-h3k27acpairs-150bp-250bp.raw.agg"
+    # m10 = deeptools_computeMatrix(
+    #     b=1000, 
+    #     R=dt_references_h3k27ac_elements_agg, 
+    #     S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW], 
+    #     o=dt_mtx_raw_h3k27ac_150n250bp_agg + ".gz",
+    # )
+    # 
+    # deeptools_plotProfiles(
+    #     m7, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-h3k27ac-150bp-250bp.minmax.norm.png",
+    #     perGroup=True,
+    #     rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Min-Max Normalized Signal",
+    #     nPlots=len(dt_references_h3k27ac_elements)
+    # )
+    # deeptools_plotProfiles(
+    #     m8, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-h3k27ac-150bp-250bp.minmax.norm.agg.png",
+    #     rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Min-Max Normalized Signal"
+    # )
+    # 
+    # deeptools_plotProfiles(
+    #     m9, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-h3k27ac-150bp-250bp.raw.png",
+    #     perGroup=True,
+    #     rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Raw Signal",
+    #     nPlots=len(dt_references_h3k27ac_elements)
+    # )
+    # deeptools_plotProfiles(
+    #     m10, 
+    #     o=p_dir + "grna-eff-vs-dhs-summit-mtx-h3k27ac-150bp-250bp.raw.agg.png",
+    #     rename=["sgRNA-effect (150bp)", "sgRNA-effect (250bp)", "CTCF", "H3K27ac", "DNase"],
+    #     colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Raw Signal"
+    # )
+    return
 
 
 @app.cell
@@ -1232,7 +1243,161 @@ def _(
         )
 
 
-    _()
+    # _()
+    return
+
+
+@app.cell
+def _(Path, cs, np, subprocess):
+    def deeptools_plotHeatmap(
+        m: str, 
+        o: str,
+        perGroup: bool = False,
+        rename: list[str] = None,
+        colors: list[str] = None,
+        refPointLabel: str = None,
+        plotTitle: str = "",
+        yAxisLabel: str = "",
+        nPlots: int = None,
+        legendLocation: str = "best"
+    ):
+        cmd = ["plotHeatmap"]
+        cmd.extend([
+            "-m", m,
+            "-o", o,
+            "--legendLocation", legendLocation,
+            "--plotTitle", plotTitle,
+            "--yAxisLabel", yAxisLabel,
+            "--colorMap", "Reds"
+        ])
+
+        if perGroup:
+            cmd.extend(["--perGroup"])
+
+        if rename is not None:
+            cmd.extend(["--samplesLabel"])
+            cmd.extend([n for n in rename])
+
+        if colors is not None:
+            cmd.extend(["--colors"])
+            cmd.extend([c for c in colors])
+
+        if refPointLabel is not None:
+            cmd.extend(["--refPointLabel", refPointLabel])
+        
+        if nPlots is not None:
+            n_display_rows = np.floor(np.sqrt(nPlots)).astype(int)
+            cmd.extend(["--numPlotsPerRow", str(n_display_rows)])
+
+        cs.mkdir(Path(o).parent)
+        subprocess.run(cmd)
+    return (deeptools_plotHeatmap,)
+
+
+@app.cell
+def _(deeptools_plotHeatmap, m4_4):
+    p_hdir = "results/2025-11-14/ctcf-analysis-plots/heatmaps/"
+    # deeptools_plotHeatmap(
+    #     m1, 
+    #     o=p_hdir + "grna-eff-vs-dhs-summit-mtx-150bp.png",
+    #     perGroup=True,
+    #     rename=["sgRNA-effect", "CTCF", "H3K27ac", "DNase"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Raw Signal",
+    # )
+
+    # deeptools_plotHeatmap(
+    #     m2, 
+    #     o=p_hdir + "grna-eff-vs-dhs-summit-mtx-150bp.minmax.norm.svg",
+    #     perGroup=True,
+    #     rename=["sgRNA-effect", "CTCF", "H3K27ac", "DNase"],
+    #     refPointLabel="DHS Summit",
+    #     yAxisLabel="Min-Max Normalized Signal",
+    # )
+
+    deeptools_plotHeatmap(
+        m4_4, 
+        o=p_hdir + "grna-eff-vs-dhs-summit-mtx-150bp-250bp.agg.png",
+        rename=["sgRNA-effect (150bp)", "sgRNA-effect (25bp)", "CTCF", "H3K27ac", "DNase", "CTCF Motifs"],
+        refPointLabel="DHS Summit",
+        yAxisLabel="Normalized Signal",
+    )
+    return
+
+
+@app.cell
+def _(dt_grnaeff_250bp, dt_references_ctcf_elements_agg):
+    print(dt_grnaeff_250bp)
+    print(dt_references_ctcf_elements_agg)
+    return
+
+
+@app.cell
+def _(
+    CTCF_BW,
+    CTCF_MOTIFS_BW,
+    DNASE_BW,
+    GRNA_EFF_BD,
+    K27AC_BW,
+    deeptools_computeMatrix,
+    deeptools_plotHeatmap,
+    deeptools_plotProfiles,
+    dt_grnaeff_150bp,
+    dt_grnaeff_250bp,
+    dt_references_ctcf_elements,
+    dt_references_ctcf_elements_agg,
+    make_grna_bigwig,
+):
+    # Get a zoomed in looked (+/-200bp)
+    dt_grnaeff_150bp_200vp =  make_grna_bigwig(GRNA_EFF_BD, 150, viewport=500)
+    dt_grnaeff_250bp_200vp =  make_grna_bigwig(GRNA_EFF_BD, 25, viewport=500)
+
+    dt_mtx_150bp_200vp = "results/2025-11-14/dt-intermediates/tmp-200vp-zoomed/grna-eff-vs-dhs-summit-mtx-150bp"
+    m1_200vp = deeptools_computeMatrix(
+        b=500, 
+        R=dt_references_ctcf_elements, 
+        S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW], 
+        o=dt_mtx_150bp_200vp + ".gz",
+    )
+
+    dt_mtx_150n250bp_agg_200vp = "results/2025-11-14/dt-intermediates/tmp-200vp-zoomed/grna-eff-vs-dhs-summit-mtx-150bp-250bp.agg"
+    m4_4_200vp = deeptools_computeMatrix(
+        b=500, 
+        R=dt_references_ctcf_elements_agg, 
+        S=[dt_grnaeff_150bp, dt_grnaeff_250bp, CTCF_BW, K27AC_BW, DNASE_BW, CTCF_MOTIFS_BW], 
+        o=dt_mtx_150n250bp_agg_200vp + ".gz",
+    )
+
+    p_dir_200vp = "results/2025-11-14/ctcf-analysis-plots/tmp-200vp/"
+    deeptools_plotProfiles(
+        m1_200vp, 
+        o=p_dir_200vp + "grna-eff-vs-dhs-summit-mtx-150bp.svg",
+        perGroup=True,
+        rename=["sgRNA-effect (150bp)", "sgRNA-effect (25bp)", "CTCF","H3K27ac", "DNase"],
+        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba"],
+        refPointLabel="DHS Summit",
+        yAxisLabel="Normalized Signal",
+        nPlots=len(dt_references_ctcf_elements)
+    )
+
+    deeptools_plotProfiles(
+        m4_4_200vp, 
+        o=p_dir_200vp + "grna-eff-vs-dhs-summit-mtx-150bp-250bp.agg.svg",
+        perGroup=True,
+        rename=["sgRNA-effect (150bp)", "sgRNA-effect (25bp)", "CTCF", "H3K27ac", "DNase", "CTCF Motifs"],
+        colors=["#f70707", "#c60606", "#71b0b3", "#e69533", "#4b79ba", "#4F7B7D"],
+        refPointLabel="DHS Summit",
+        yAxisLabel="Normalized Signal",
+        nPlots=len(dt_references_ctcf_elements)
+    )
+    p_hdir_200vp = "results/2025-11-14/ctcf-analysis-plots/tmp-200vp/heatmaps/"
+    deeptools_plotHeatmap(
+        m4_4_200vp, 
+        o=p_hdir_200vp+ "grna-eff-vs-dhs-summit-mtx-150bp-250bp.agg.svg",
+        rename=["sgRNA-effect (150bp)", "sgRNA-effect (25bp)", "CTCF", "H3K27ac", "DNase", "CTCF Motifs"],
+        refPointLabel="DHS Summit",
+        yAxisLabel="Normalized Signal",
+    )
     return
 
 
