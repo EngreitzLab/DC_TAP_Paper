@@ -55,6 +55,7 @@ results/main_figure_3/results_wo_positive_controls/ARCHIVE/*
 ARCHIVE/*
 ARCHIVE.tar.gz
 .snakemake/*
+**/__marimo__/
 
 # RDA objects directory
 RDA_objects/

@@ -31,30 +31,15 @@ def _():
     import numpy as np
     import pandas as pd
 
-    import itables
-    import altair as alt
     import matplotlib.pyplot as plt
 
     from pybedtools import BedTool
-    return BedTool, itables, pd
+    return BedTool, pd
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""## Main Notebook""")
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""### Notebook Setup""")
-    return
-
-
-@app.cell
-def _(itables):
-    # Setup
-    itables.init_notebook_mode(all_interactive=True)
     return
 
 
