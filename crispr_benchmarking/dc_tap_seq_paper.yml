@@ -1,0 +1,24 @@
+comparisons:
+  DC_TAPseq:
+    pred:
+      ABCdnase:
+        ["/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/ABC/dhs_only/K562_ENCSR000EOT/Predictions/EnhancerPredictionsAllPutative.tsv.gz",
+         "/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/ABC/dhs_only/WTC11_ENCSR785ZUI/Predictions/EnhancerPredictionsAllPutative.tsv.gz"]
+      ENCODE_rE2G:
+        ["/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/ENCODE-rE2G/dhs_only/full_predictions/encode_e2g_predictions_K562_ENCSR000EOT_full_predictions.tsv.gz",
+         "/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/ENCODE-rE2G/dhs_only/full_predictions/encode_e2g_predictions_WTC11_ENCSR785ZUI_full_predictions.tsv.gz"]
+      correlation_k562_dnase:
+        ["/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/Correlation/correlation_K562_ENCSR000EOT_full_predictions.tsv.gz",
+         "/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/Correlation/correlation_WTC11_ENCSR785ZUI_full_predictions.tsv.gz"]
+    expt: "/oak/stanford/groups/engreitz/Users/agschwin/distal_regulation_paper/CRISPR_benchmarks/WIP/resize_final_dc_tap_elements_20250820/EPBenchmark_DC_TAPseq_randomElementGenePairs_0.8pwrAt25effect.tsv.gz"
+    gene_universe: "resources/genome_annotations/CollapsedGeneBounds.hg38.bed"
+    tss_universe: "resources/genome_annotations/CollapsedGeneBounds.hg38.TSS500bp.bed"
+    pred_config: "config/predictor_config_files/benchmarking_pred_config_with_alpha.tsv"
+    include_col: "crispr_main_benchmarks"
+    cell_type_mapping:
+      ABCdnase: "config/cell_type_mappings/ABCdnase_cell_type_mapping.txt"
+      ENCODE_rE2G: "config/cell_type_mappings/ENCODE-rE2G_cell_type_mapping.txt"
+      EpiMap: "config/cell_type_mappings/EpiMap_cell_type_mapping.txt"
+      correlation_k562_dnase: "config/cell_type_mappings/ABCdnase_cell_type_mapping.txt"
+    dist_bins_kb: [0, 10, 100, 1500]
+    expressed_genes: "resources/genomic_features/expressed_genes_all_cell_types.tsv"
