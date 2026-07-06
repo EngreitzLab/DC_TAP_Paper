@@ -1,0 +1,48 @@
+DC-TAP-seq × ENCODE ChIP-seq overlap/enrichment — FINAL DELIVERABLES
+=====================================================================
+Reviewer response: broader ENCODE TF + histone catalog overlap for
+DC-TAP-seq positive elements (K562 and WTC11), hg38.
+
+Open report.html first — it embeds all figures and summarizes results.
+README.md documents methods, curation rules, and how to re-run the pipeline.
+
+TOP LEVEL
+  report.html ............ Self-contained HTML report (figures embedded as base64)
+  README.md .............. Methods + reproducibility documentation
+  MANIFEST.txt ........... This file
+
+figures/                  (PNG for viewing; PDF = vector, fonttype-42, Illustrator-editable)
+  heatmap_K562.{png,pdf} ...... Element × ChIP target overlap, K562 (rows split by effect-size sign)
+  heatmap_WTC11.{png,pdf} ..... Element × ChIP target overlap, WTC11
+  volcano_neg_powered.{png,pdf} . Per-target enrichment volcano (neg-effect positives vs powered bg)
+  dotplot_neg_powered.{png,pdf} . Top significant targets, log2 OR ± 95% CI
+  dotplot_neg_powered_all.{png,pdf} . All FDR<0.1 targets, log2 OR ± 95% CI
+
+tables/
+  overlap_by_element.csv ...... Per-element overlap (long/consolidated), both cells
+  enrichment_by_assay.csv ..... Consolidated enrichment across assays
+  enrichment_K562.csv ......... Per-target Fisher enrichment + BH-FDR, K562
+  enrichment_WTC11.csv ........ Per-target Fisher enrichment + BH-FDR, WTC11
+  overlap_matrix_K562.csv ..... Element × target binary matrix, K562
+  overlap_matrix_WTC11.csv .... Element × target binary matrix, WTC11
+  target_assay_K562.csv ....... target → assay-class map, K562
+  target_assay_WTC11.csv ...... target → assay-class map, WTC11
+  element_manifest.csv ........ Element sets (positives/backgrounds) from Table S3
+
+metadata/                 (ENCODE curation audit trail)
+  encode_selected_files.csv ... Peak files used (one experiment per target; href for re-download)
+  encode_metadata_K562.csv .... Full K562 ChIP-seq experiment metadata
+  encode_metadata_iPSC.csv .... Full WTC11/iPSC-arm experiment metadata
+  encode_excluded_audit.csv ... Experiments considered but not selected, with reason
+  encode_experiment_labs.csv .. Lab attribution per experiment
+
+scripts/                  (reproducible pipeline; relative paths + argparse; run in order)
+  1. build_element_sets.py ......... Table S3 -> element sets
+  2. curate_encode_metadata.py ..... query + curate ENCODE metadata (one experiment/target)
+  3. download_encode.py ............ download peak files from encode_selected_files.csv
+  4. compute_overlap_enrichment.py . overlap matrices + Fisher enrichment
+  5. make_figures.py ............... heatmaps, volcano, dotplots
+  6. build_report.py ............... assemble report.html
+
+NOTE: Raw ENCODE peak files (~340 MB) are NOT included. Re-download them with
+scripts/download_encode.py using metadata/encode_selected_files.csv.
