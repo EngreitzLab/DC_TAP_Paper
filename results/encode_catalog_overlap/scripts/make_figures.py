@@ -33,6 +33,8 @@ matplotlib.rcParams["ps.fonttype"] = 42
 matplotlib.rcParams["svg.fonttype"] = "none"
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
+from matplotlib.patches import Rectangle
+from matplotlib.collections import PatchCollection
 from scipy.cluster.hierarchy import linkage, leaves_list
 
 warnings.filterwarnings("ignore")
@@ -91,6 +93,24 @@ def _hex2rgb(hexc):
     return [int(hexc[j:j + 2], 16) / 255 for j in (0, 2, 4)]
 
 
+def _vecgrid(ax, n_rows, xmax):
+    """Set up an axis so grid cell (col j, row i) is the unit square
+    [j, j+1] x [i, i+1] with row 0 at the TOP (imshow-like orientation)."""
+    ax.set_xlim(0, xmax)
+    ax.set_ylim(n_rows, 0)          # inverted => row 0 at top
+    ax.set_aspect("auto")
+
+
+def _row_rects(ax, colors, n_rows, edge=None, lw=0.0):
+    """Draw one full-width VECTOR rectangle per row, colored by colors[i].
+    Replaces a 1-px-wide imshow raster strip so the fills survive PDF import
+    into Illustrator without being resampled/recolored."""
+    for i, c in enumerate(colors):
+        ax.add_patch(Rectangle((0, i), 1, 1, facecolor=c,
+                               edgecolor=edge or "none", linewidth=lw))
+    _vecgrid(ax, n_rows, 1)
+
+
 def make_heatmap(cell, full, mat, ta, enr, man):
     posneg = set(full.index[full["is_pos_neg"]])
     pospos = full.index[full["is_pos_pos"]]
@@ -144,31 +164,34 @@ def make_heatmap(cell, full, mat, ta, enr, man):
         1, 3, figsize=(main_w + 1.8, max(5, n_rows * 0.17)),
         gridspec_kw={"width_ratios": [0.55, 0.4, main_w], "wspace": 0.03})
 
-    # category strip
-    strip = np.zeros((n_rows, 1, 3))
-    for i, k in enumerate(row_order):
-        strip[i, 0] = _hex2rgb(CATEGORY_COLORS.get(cat.get(k), "#ffffff"))
-    axc.imshow(strip, aspect="auto", interpolation="none")
+    # category strip (VECTOR rectangles, one per row)
+    cat_colors = [CATEGORY_COLORS.get(cat.get(k), "#ffffff") for k in row_order]
+    _row_rects(axc, cat_colors, n_rows)
     axc.set_xticks([]); axc.set_xlabel("category", fontsize=6)
     ylabels = [f"{sg.get(k, '?')} | {k}  ({'-' if k in posneg else '+'})" for k in row_order]
-    axc.set_yticks(range(n_rows)); axc.set_yticklabels(ylabels, fontsize=5)
+    axc.set_yticks([i + 0.5 for i in range(n_rows)]); axc.set_yticklabels(ylabels, fontsize=5)
 
-    # <100 kb to TSS strip: filled = near (<100kb), open = far
-    dstrip = np.ones((n_rows, 1, 3))
+    # <100 kb to TSS strip: filled = near (<100kb), open = far (VECTOR rects)
     near_flags = []
-    for i, k in enumerate(row_order):
+    dcolors = []
+    for k in row_order:
         d = dist.get(k, np.nan)
         near = (not pd.isna(d)) and (d < TSS_NEAR_BP)
         near_flags.append(near)
-        dstrip[i, 0] = _hex2rgb("#2c3e50") if near else _hex2rgb("#ecf0f1")
-    axd.imshow(dstrip, aspect="auto", interpolation="none")
+        dcolors.append("#2c3e50" if near else "#ecf0f1")
+    _row_rects(axd, dcolors, n_rows, edge="#ffffff", lw=0.15)
     axd.set_xticks([]); axd.set_yticks([])
     axd.set_xlabel("<100kb\nto TSS", fontsize=5.5)
 
-    # main overlap matrix
-    ax.imshow(D.values, aspect="auto", cmap="Greys", vmin=0, vmax=1, interpolation="none")
+    # main overlap matrix (VECTOR: one black square per overlap; binary 0/1)
+    Dv = D.values
+    n_cols = len(cols)
+    rects = [Rectangle((j, i), 1, 1)
+             for i in range(n_rows) for j in range(n_cols) if Dv[i, j] >= 0.5]
+    ax.add_collection(PatchCollection(rects, facecolor="#1a1a1a", edgecolor="none"))
+    _vecgrid(ax, n_rows, n_cols)
     ax.set_yticks([])
-    ax.set_xticks(range(len(cols))); ax.set_xticklabels(cols, rotation=90, fontsize=5)
+    ax.set_xticks([j + 0.5 for j in range(len(cols))]); ax.set_xticklabels(cols, rotation=90, fontsize=5)
     for t, lab in zip(ax.get_xticklabels(), cols):
         if lab in key_cols:
             t.set_color("#c0392b"); t.set_fontweight("bold")
@@ -177,13 +200,14 @@ def make_heatmap(cell, full, mat, ta, enr, man):
         else:
             t.set_color("#333333")
 
-    # neg/pos divider on all three panels
+    # neg/pos divider on all three panels (row boundary => integer coord in
+    # the vector grid, where cell i spans [i, i+1])
     for a in (axc, axd, ax):
-        a.axhline(n_neg - 0.5, color="#c0392b", lw=1.5)
+        a.axhline(n_neg, color="#c0392b", lw=1.5)
     # divider after the pinned key-mark columns
-    ax.axvline(len(key_cols) - 0.5, color="#c0392b", lw=1.2)
+    ax.axvline(len(key_cols), color="#c0392b", lw=1.2)
     # divider between the remaining histone block and the TF block
-    ax.axvline(len(key_cols) + len(rest_hist) - 0.5, color="#2980b9", lw=1.0, ls="--")
+    ax.axvline(len(key_cols) + len(rest_hist), color="#2980b9", lw=1.0, ls="--")
 
     ax.set_title(f"{cell}: DC-TAP-seq positive elements x ChIP-seq target overlap\n"
                  f"rows above red line = negative effect (-), below = positive (+); "
@@ -377,6 +401,79 @@ def make_lollipop(data, top_n=18, sign="neg", background="powered",
     return True
 
 
+def make_lollipop_compact(data, top_n=10, sign="neg", background="powered",
+                          outfile="enrichment/dotplot_neg_powered_compact.png"):
+    """Compact two-panel dot plot for tiling beneath the heatmaps.
+
+    Same statistics as make_lollipop (log2 OR point, 95% Woolf/Haldane CI bar,
+    dot size proportional to overlap fraction), but tuned for a small footprint:
+      - top_n per cell (default 10) so both panels are equally short;
+      - tight row pitch and single-line titles;
+      - inline label reduced to overlap-fraction + FDR stars (exact p and CI
+        method live in a one-line footnote, not per row).
+    """
+    sign_lab = {"neg": "neg-effect", "pos": "pos-effect"}[sign]
+    bg_lab = {"powered": "well-powered background", "all": "all-non-sig background"}[background]
+
+    tops = {}
+    for cell in CELLS:
+        enr = data[cell]
+        r = enr[(enr["effect_sign"] == sign) & (enr["background"] == background)].copy()
+        sig = r[r["FDR"] < 0.1]
+        top = (sig if top_n is None else sig.nsmallest(top_n, "FDR")).sort_values("log2_OR")
+        if len(top):
+            ci = top.apply(_log2or_ci, axis=1, result_type="expand")
+            top["ci_lo"], top["ci_hi"] = ci[0].values, ci[1].values
+        tops[cell] = top
+    nmax = max((len(t) for t in tops.values()), default=0)
+    if nmax == 0:
+        print(f"{os.path.basename(outfile)}: no targets at FDR<0.1 — figure skipped")
+        return False
+
+    # compact pitch: ~0.2 in/row + small margins
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 0.2 * nmax + 0.9))
+    for ax, cell in zip(axes, CELLS):
+        top = tops[cell]
+        ymax = len(top)
+        for i, (_, row) in enumerate(top.iterrows()):
+            ec = "#e67e22" if row["assay"] == "Histone ChIP-seq" else "#34495e"
+            ax.plot([row["ci_lo"], row["ci_hi"]], [i, i], color=ec, lw=1.0, alpha=0.55, zorder=2)
+        colors = ["#e67e22" if a == "Histone ChIP-seq" else "#34495e" for a in top["assay"]]
+        ax.scatter(top["log2_OR"], range(ymax), c=colors,
+                   s=[18 + 90 * f for f in top["pos_frac"]], zorder=3,
+                   edgecolors="k", linewidths=0.25)
+        ax.set_yticks(range(ymax)); ax.set_yticklabels(top["target"], fontsize=6)
+        ax.set_ylim(-0.7, nmax - 0.3)
+        ax.axvline(0, color="#c0392b", lw=0.8, ls="--", zorder=1)
+        ax.set_title(f"{cell} ({sign_lab}, top {ymax})", fontsize=8)
+        ax.tick_params(axis="x", labelsize=6)
+        for s in ["top", "right"]:
+            ax.spines[s].set_visible(False)
+        xlo = min(0, top["ci_lo"].min()); xhi = top["ci_hi"].max()
+        xr = xhi - xlo if xhi > xlo else 1.0
+        ax.set_xlim(xlo - 0.05 * xr, xhi + 0.42 * xr)   # room for short label only
+        for i, (_, row) in enumerate(top.iterrows()):
+            ax.text(row["ci_hi"] + 0.03 * xr, i,
+                    f"{row['pos_overlap']}/{row['pos_total']} {_fdr_stars(row['FDR'])}",
+                    va="center", fontsize=5, color="#555")
+    axes[0].set_xlabel("log2 OR (95% CI)", fontsize=6.5)
+    axes[1].set_xlabel("log2 OR (95% CI)", fontsize=6.5)
+    leg = [Line2D([0], [0], marker="o", color="w", markerfacecolor="#34495e", label="TF", markersize=6),
+           Line2D([0], [0], marker="o", color="w", markerfacecolor="#e67e22", label="Histone", markersize=6)]
+    fig.legend(handles=leg, loc="upper right", bbox_to_anchor=(0.995, 0.99),
+               frameon=False, fontsize=6.5, ncol=2)
+    fig.text(0.5, 0.005,
+             "Fisher's exact, BH-FDR (vs well-powered background). Dot size \u221d overlap fraction; "
+             "bar = 95% CI (Woolf/Haldane); label = overlap/total + FDR stars "
+             "(*** <0.001, ** <0.01, * <0.05, \u2020 <0.1).",
+             ha="center", fontsize=5, color="#666")
+    fig.tight_layout(rect=[0, 0.03, 1, 0.97])
+    save_fig(fig, os.path.splitext(outfile)[0])
+    plt.close(fig)
+    print(f"{os.path.basename(outfile)} (compact dot plot, top {top_n}/cell, {nmax} rows)")
+    return True
+
+
 def main():
     man = pd.read_csv("elements/element_manifest.csv")
     per_cell = {}
@@ -389,6 +486,9 @@ def main():
     make_volcano(enr_data)
     make_lollipop(enr_data, top_n=18, sign="neg", background="powered",
                   outfile="enrichment/dotplot_neg_powered.png")
+    # compact version for composing with the two heatmaps in one figure
+    make_lollipop_compact(enr_data, top_n=10, sign="neg", background="powered",
+                          outfile="enrichment/dotplot_neg_powered_compact.png")
     # full reference version: every FDR<0.1 target (not embedded in the report)
     make_lollipop(enr_data, top_n=None, sign="neg", background="powered",
                   outfile="enrichment/dotplot_neg_powered_all.png")
@@ -396,6 +496,151 @@ def main():
     # produced for completeness; the function skips output if nothing is enriched.
     make_lollipop(enr_data, top_n=None, sign="pos", background="powered",
                   outfile="enrichment/dotplot_pos_powered_all.png")
+    make_waterfalls(enr_data)
+
+
+
+# ---------------------------------------------------------------------------
+# Waterfall enrichment figures (reviewer response, added post-hoc)
+#
+# For each cell type x effect-sign, rank every tested ChIP-seq target by its
+# log2 odds ratio (positives vs well-powered background) and draw a signed bar
+# ("waterfall"). Significant targets (BH-FDR < WF_SIG_FDR) are colored; the top
+# enriched targets are direct-labeled above the axis via a non-crossing leader
+# fan, and any significantly depleted targets are labeled with leaders rising
+# from the x-axis. Produces four individual panels plus two composites:
+#   waterfall/waterfall_{CELL}_{neg,pos}.{png,pdf}
+#   waterfall/waterfall_composite_2x2.{png,pdf}       (all four panels a-d)
+#   waterfall/waterfall_neg_composite_ab.{png,pdf}    (two neg panels a,b)
+# Reads enrichment/enrichment_{CELL}.csv (same input as the other figures).
+# ---------------------------------------------------------------------------
+from matplotlib.patches import Patch
+
+WF_SIG_FDR = 0.1
+WF_COL_SIG = "#c5373d"      # FDR < 0.1
+WF_COL_NS = "#c5cad7"       # not significant
+WF_CELL_TITLE = {"K562": "K562", "WTC11": "WTC11"}
+WF_SGN_TITLE = {"neg": "negative-effect elements", "pos": "positive-effect elements"}
+WF_YLAB = ("log$_2$ odds ratio\n(elements with significant effect vs\n"
+           "well-powered background)")
+
+
+def waterfall_panel(ax, enr, cell, sgn, n_label=10, show_ylabel=True, show_xlabel=True):
+    """Draw one ranked-enrichment waterfall on `ax`. `enr` is the enrichment
+    table for one cell (columns: target, effect_sign, background, log2_OR, FDR).
+    Returns the number of significant targets in the panel."""
+    sub = enr[(enr.background == "powered") & (enr.effect_sign == sgn)].copy()
+    sub = sub.sort_values("log2_OR", ascending=False).reset_index(drop=True)
+    x = np.arange(len(sub))
+    n = len(sub)
+    sig = sub.FDR < WF_SIG_FDR
+    ax.bar(x, sub.log2_OR, width=1.0, color=np.where(sig, WF_COL_SIG, WF_COL_NS), linewidth=0)
+    ax.axhline(0, color="#444444", lw=0.8, zorder=3)
+    n_sig = int(sig.sum())
+    ymax = max(sub.log2_OR.max(), 0)
+    ymin = min(sub.log2_OR.min(), 0)
+    yline = ymax * 1.10
+
+    # top-N significant ENRICHMENTS: direct-labeled above the axis via a
+    # non-crossing leader fan (anchors spread left-to-right, first pushed off
+    # the y-axis so the leftmost leader angles in).
+    pos_sig = sub[sig & (sub.log2_OR > 0)].sort_values("log2_OR", ascending=False).head(n_label)
+    if len(pos_sig):
+        lab = pos_sig.sort_values("log2_OR", ascending=False)
+        bx = lab.index.values.astype(float)
+        bh = lab.log2_OR.values
+        names = lab.target.values
+        k = len(lab)
+        gap = n * 0.052
+        span = max(bx.max() - bx.min(), gap * (k - 1))
+        c = (bx.min() + bx.max()) / 2
+        lo = c - span / 2
+        hi = c + span / 2
+        left_min = n * 0.03
+        if lo < left_min:
+            hi += (left_min - lo)
+            lo = left_min
+        if hi > n - 1:
+            shift = hi - (n - 1)
+            lo = max(lo - shift, left_min)
+            hi = n - 1
+        ax_x = np.linspace(lo, hi, k)
+        for axx, hx, hh, nm in zip(ax_x, bx, bh, names):
+            ax.plot([hx, axx], [hh + ymax * 0.01, yline], color="#999999", lw=0.5, zorder=2)
+            ax.text(axx, yline + ymax * 0.02, nm, ha="center", va="bottom",
+                    rotation=90, fontsize=6, zorder=4)
+
+    # significant DEPLETIONS: labeled above the axis at a lower band, sorted by
+    # bar x-position (so leaders do not cross), with leaders rising from y=0.
+    neg_sig = sub[sig & (sub.log2_OR < 0)].sort_index()
+    if len(neg_sig):
+        k2 = len(neg_sig)
+        bx2 = neg_sig.index.values.astype(float)
+        names2 = neg_sig.target.values
+        y_dep = ymax * 0.42
+        anchors = np.linspace(n * 0.86, n * 0.96, k2)
+        for axx, hx, nm in zip(anchors, bx2, names2):
+            ax.plot([hx, axx], [0, y_dep - ymax * 0.01], color="#999999", lw=0.5, zorder=2)
+            ax.text(axx, y_dep, nm, ha="center", va="bottom", rotation=90, fontsize=6, zorder=4)
+
+    ax.set_ylim(ymin - 0.10 * abs(ymax) - 0.05,
+                (yline + ymax * 0.62) if len(pos_sig) else ymax * 1.1 + 0.2)
+    ax.set_xlim(-1.5, n + 0.5)
+    if show_xlabel:
+        ax.set_xlabel(f"ChIP-seq targets ranked by enrichment (n={n})")
+    if show_ylabel:
+        ax.set_ylabel(WF_YLAB)
+    ax.set_title(f"{WF_CELL_TITLE[cell]}: {WF_SGN_TITLE[sgn]}\n{n_sig} significant (FDR<0.1)",
+                 loc="left", fontsize=8)
+    return n_sig
+
+
+def _wf_legend(ax):
+    ax.legend(handles=[Patch(color=WF_COL_SIG, label="FDR < 0.1"),
+                       Patch(color=WF_COL_NS, label="n.s.")],
+              frameon=False, fontsize=6, loc="upper right")
+
+
+def make_waterfalls(enr_data):
+    """Four individual waterfall panels + the 2x2 and neg-only a/b composites."""
+    os.makedirs("waterfall", exist_ok=True)
+
+    # individual panels
+    for cell in CELLS:
+        for sgn in ("neg", "pos"):
+            fig, ax = plt.subplots(figsize=(4.8, 3.6))
+            waterfall_panel(ax, enr_data[cell], cell, sgn)
+            _wf_legend(ax)
+            fig.tight_layout()
+            save_fig(fig, f"waterfall/waterfall_{cell}_{sgn}")
+            plt.close(fig)
+
+    # 2x2 composite: rows = K562/WTC11, cols = neg/pos, panel letters a-d
+    grid = [("K562", "neg"), ("K562", "pos"), ("WTC11", "neg"), ("WTC11", "pos")]
+    fig, axes = plt.subplots(2, 2, figsize=(9.2, 7.2))
+    for ax, (cell, sgn), lab in zip(axes.flat, grid, ["a", "b", "c", "d"]):
+        r, c = divmod(grid.index((cell, sgn)), 2)
+        waterfall_panel(ax, enr_data[cell], cell, sgn,
+                        show_ylabel=(c == 0), show_xlabel=(r == 1))
+        _wf_legend(ax)
+        ax.text(-0.14, 1.06, lab, transform=ax.transAxes, fontsize=12,
+                fontweight="bold", va="top", ha="left")
+    fig.tight_layout(w_pad=2.0, h_pad=2.4)
+    save_fig(fig, "waterfall/waterfall_composite_2x2")
+    plt.close(fig)
+
+    # two-panel negative-effect composite (a = K562, b = WTC11)
+    fig, axes = plt.subplots(1, 2, figsize=(9.4, 3.9))
+    for ax, cell, lab in zip(axes, ["K562", "WTC11"], ["a", "b"]):
+        waterfall_panel(ax, enr_data[cell], cell, "neg",
+                        show_ylabel=(lab == "a"), show_xlabel=True)
+        _wf_legend(ax)
+        ax.text(-0.16 if lab == "a" else -0.10, 1.06, lab, transform=ax.transAxes,
+                fontsize=12, fontweight="bold", va="top", ha="left")
+    fig.tight_layout(w_pad=2.2)
+    save_fig(fig, "waterfall/waterfall_neg_composite_ab")
+    plt.close(fig)
+    print("waterfall panels + 2x2 + neg a/b composites")
 
 
 if __name__ == "__main__":
