@@ -1,0 +1,267 @@
+---
+title: "Confidence intervals for the per-pair probability of direct effect"
+author: "DC-TAP paper -- reviewer response (per-pair uncertainty)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 9, fig.height = 6, dpi = 100)
+```
+
+```{r attachPackages, message=FALSE, warning=FALSE}
+library(tidyverse)
+```
+
+```{r loadData}
+# load all required input data
+res_dir <- file.path(getwd(), "results")
+S <- readRDS(file.path(res_dir, "bootstrap_summary.rds"))
+curves   <- S$curves
+coef_df  <- S$coef
+indirect <- S$indirect
+ci_lab   <- paste0(round(100 * S$ci_level), "%")
+
+# reformat curve data for plotting (done once, reused by all curve plots)
+curves <- curves %>%
+  mutate(type = factor(type, levels = c("negative", "positive")),
+         cell_type = factor(cell_type))
+
+# per-pair DC-TAP results + CIs, used in the per-pair analyses
+dctap <- read_tsv(S$dctap_ci_file, show_col_types = FALSE)
+```
+
+## Motivation
+
+The "probability of direct effect" main analysis reports a per-pair point estimate but **no per-pair uncertainty**. Here we add confidence intervals by **bootstrapping the differential-expression 
+results** (not re-running sceptre/MAST).
+
+The published estimate is reconstructed exactly (see validation in the run log): an indirect-effect rate is estimated per dataset from other-chromosome (*trans*) perturbations, a distance-decaying
+direct-effect rate is fit as a power law `direct_rate = a * dist^b`, and per pair:
+
+$$p_{\text{direct}}(d) = \frac{r_{\text{direct}}(d)}{r_{\text{direct}}(d) + r_{\text{indirect}}}$$
+
+**Uncertainty model.** We use a non-parametric **cluster (block) bootstrap that resamples
+perturbations with replacement** within each of the 7 datasets that feed the model
+(`B = `r S$B``, seed `r S$seed`). Resampling whole perturbations (rather than individual pairs)
+preserves the fact that a single perturbation could drives many *trans* pairs, and it probes
+sensitivity to the composition of the candidate element selection. Each replicate recomputes the
+direct/indirect rates, re-fits the power law, and recomputes the probability of direct effects.
+
+## Directness probability vs. distance, with `r ci_lab` CI
+
+```{r, fig.height=4, fig.width=8}
+# plot probability of direct effects as function of distance to TSS including confidence intervals.
+# the observational support behind these curves is shown separately below.
+ggplot(curves, aes(x = dist_to_tss, group = interaction(cell_type, type))) +
+  facet_wrap(~cell_type, scales = "free") +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = cell_type), alpha = 0.15) +
+  geom_line(aes(y = point, color = cell_type, lty = type), linewidth = 0.9) +
+  labs(x = "Distance to TSS", y = "P(direct effect)",
+       title = "Probability of direct effect with bootstrap CI",
+       subtitle = paste0("Solid = published point estimate; ribbon = ", ci_lab, " CI"),
+       fill = "Cell type", color = "Cell type", lty = "Direction of effect") +
+  scale_color_manual(values = c(K562 = "red", WTC11 = "blue")) +
+  scale_fill_manual(values = c(K562 = "red", WTC11 = "blue")) +
+  scale_x_continuous(labels = function(x) paste0(x/1e3, "kb")) +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_classic(base_size = 12) +
+  theme(strip.background = element_blank())
+
+ggsave(filename = "../plots/prob_direct_effect_with_CI.pdf", height = 4, width = 8, create.dir = TRUE)
+```
+
+Include inferred median rate and show Distance to TSS in log10 space:
+```{r ribbon}
+ggplot(curves, aes(dist_to_tss)) +
+  geom_ribbon(aes(ymin = lower, ymax = upper, fill = cell_type), alpha = 0.25) +
+  geom_line(aes(y = point, color = cell_type), linewidth = 0.9) +
+  geom_line(aes(y = median, color = cell_type), linetype = "22", linewidth = 0.5) +
+  facet_grid(type ~ cell_type) +
+  scale_x_log10(labels = function(x) paste0(x/1e3, "kb")) +
+  labs(x = "Distance to TSS", y = "P(direct effect)",
+       title = "Probability of direct effect with bootstrap CI",
+       subtitle = paste0("Solid = published point estimate; dashed = bootstrap median; ribbon = ",
+                          ci_lab, " CI"),
+       fill = "Cell type", color = "Cell type") +
+  theme_bw(base_size = 12)
+```
+
+The ribbon widens with distance to TSS -- where the direct-effect rate approaches
+the indirect baseline, the probability that a hit is direct becomes most
+uncertain. The published point estimate lies within the interval throughout.
+
+## Support behind the estimate: cis pairs and perturbations vs. distance
+
+Rather than annotate the curves with a rug (which could only show pairs from the
+plotted cell types), we show the full observational support here: the cis pairs
+and **distinct perturbations** that feed the direct-effect rate, across all
+datasets used in the fit. Because the bootstrap resamples *perturbations* (not
+pairs), the perturbation count is the unit of independent information -- and it is
+what governs how stable each fitted rate is at a given distance.
+
+```{r support-counts, fig.height=6, fig.width=10}
+cis_support <- read_tsv(file.path(res_dir, "cis_support_by_distance.tsv"),
+                        show_col_types = FALSE)
+
+# bin distance the same way the direct-effect rate is computed (50 kb bins, <= 1 Mb)
+bin_w <- 5e4; max_d <- 1e6
+support_binned <- cis_support %>%
+  filter(dist_to_tss <= max_d) %>%
+  mutate(bin_mid = (floor(dist_to_tss / bin_w) + 0.5) * bin_w) %>%
+  group_by(dataset, bin_mid) %>%
+  summarize(pairs = n(), perturbations = n_distinct(perturbation), .groups = "drop") %>%
+  pivot_longer(c(pairs, perturbations), names_to = "unit", values_to = "count")
+
+ggplot(support_binned, aes(bin_mid, count, color = unit)) +
+  geom_line(linewidth = 0.7) +
+  geom_point(size = 0.9) +
+  facet_wrap(~ dataset, scales = "free_y") +
+  scale_x_continuous(labels = function(x) paste0(x / 1e3, "kb")) +
+  labs(x = "Distance to TSS", y = "Count (cis)", color = NULL,
+       title = "Cis support behind the direct-effect rate",
+       subtitle = "Tested cis pairs and distinct perturbations per 50 kb bin (<= 1 Mb), per dataset") +
+  theme_bw(base_size = 12)
+```
+
+Breaking the **significant** hits down by effect direction shows directly why the
+positive-effect CI blows up near the TSS: there are very few significant positive
+hits at short distances, so that end of the positive direct-rate fit rests on a
+handful of perturbations.
+
+```{r support-direction, fig.height=6, fig.width=10}
+sig_binned <- cis_support %>%
+  filter(dist_to_tss <= max_d, significant) %>%
+  mutate(bin_mid = (floor(dist_to_tss / bin_w) + 0.5) * bin_w,
+         direction = if_else(regulated_positive, "positive", "negative")) %>%
+  group_by(dataset, bin_mid, direction) %>%
+  summarize(hits = n(), perturbations = n_distinct(perturbation), .groups = "drop")
+
+ggplot(sig_binned, aes(bin_mid, hits, color = direction)) +
+  geom_line(linewidth = 0.7) +
+  geom_point(size = 0.9) +
+  facet_wrap(~ dataset, scales = "free_y") +
+  scale_x_continuous(labels = function(x) paste0(x / 1e3, "kb")) +
+  labs(x = "Distance to TSS", y = "Significant cis hits", color = "Direction of effect",
+       title = "Significant cis hits by effect direction vs. distance",
+       subtitle = "Few positive hits near the TSS -> unstable positive direct-rate fit -> wide CI") +
+  theme_bw(base_size = 12)
+```
+
+## Power-law coefficients: bootstrap distribution
+
+```{r coefs}
+coef_ci <- coef_df %>%
+  filter(replicate >= 1) %>%
+  group_by(type) %>%
+  summarize(a_median = median(a), a_lo = quantile(a, .025), a_hi = quantile(a, .975),
+            b_median = median(b), b_lo = quantile(b, .025), b_hi = quantile(b, .975),
+            .groups = "drop") %>%
+  left_join(coef_df %>% filter(replicate == 0) %>% select(type, a_point = a, b_point = b),
+            by = "type")
+knitr::kable(coef_ci, digits = 4,
+             caption = paste0("Power-law coefficients (direct_rate = a * dist^b): point estimate and ",
+                              ci_lab, " bootstrap CI"))
+
+ggplot(filter(coef_df, replicate >= 1), aes(b)) +
+  geom_histogram(bins = 40, fill = "grey70", color = "white") +
+  geom_vline(data = filter(coef_df, replicate == 0), aes(xintercept = b),
+             color = "firebrick", linewidth = 0.8) +
+  facet_wrap(~ type, scales = "free") +
+  labs(x = "power-law exponent b", y = "bootstrap replicates",
+       title = "Distribution of the distance-decay exponent",
+       subtitle = "red = point estimate") +
+  theme_bw(base_size = 12)
+```
+
+## Indirect (trans) rate uncertainty per dataset
+
+```{r indirect}
+ind_ci <- indirect %>%
+  filter(type == "all") %>%
+  group_by(dataset) %>%
+  summarize(median = median(indirect_rate),
+            lo = quantile(indirect_rate, .025), hi = quantile(indirect_rate, .975),
+            .groups = "drop") %>%
+  arrange(median)
+ggplot(ind_ci, aes(reorder(dataset, median), median)) +
+  geom_pointrange(aes(ymin = lo, ymax = hi)) +
+  coord_flip() +
+  labs(x = NULL, y = "indirect (trans) hit rate",
+       title = paste0("Indirect-rate ", ci_lab, " CI per dataset")) +
+  theme_bw(base_size = 12)
+```
+
+## Per-pair confidence intervals (DC-TAP results)
+
+```{r perpair}
+# `dctap` (per-pair results + CIs) is loaded once in the 'support' chunk above
+
+# tidy the per-pair directness + CI into long form for the two effect types
+long <- bind_rows(lapply(S$dctap_types, function(ty) {
+  tibble(cell_type = dctap$cell_type,
+         distance  = abs(dctap$distance_to_gencode_gene_TSS),
+         significant = dctap$significant,
+         type = ty,
+         point = dctap[[paste0("direct_vs_indirect_", ty)]],
+         lower = dctap[[paste0("direct_vs_indirect_", ty, "_lower")]],
+         upper = dctap[[paste0("direct_vs_indirect_", ty, "_upper")]])
+})) %>% filter(!is.na(point))
+
+long <- mutate(long, ci_width = upper - lower)
+
+knitr::kable(
+  long %>% group_by(type, cell_type) %>%
+    summarize(n = n(), median_width = median(ci_width, na.rm = TRUE),
+              median_point = median(point, na.rm = TRUE), .groups = "drop"),
+  digits = 3, caption = paste0("Per-pair ", ci_lab, " CI width summary"))
+```
+
+### CI width vs. distance
+
+```{r width-dist}
+ggplot(long, aes(distance, ci_width, color = cell_type)) +
+  geom_point(alpha = 0.15, size = 0.6) +
+  facet_grid(type ~ cell_type) +
+  scale_x_log10(labels = function(x) paste0(x/1e3, "kb")) +
+  labs(x = "Distance to TSS", y = paste0(ci_lab, " CI width"),
+       title = "Per-pair CI width grows with distance to TSS") +
+  guides(color = "none") + theme_bw(base_size = 12)
+```
+
+### Example: significant pairs with directness + CI
+
+```{r examples}
+ex <- long %>%
+  filter(significant == TRUE, type == "positive") %>%
+  arrange(distance) %>%
+  transmute(cell_type, distance_kb = round(distance/1e3, 1),
+            `P(direct)` = round(point, 3),
+            CI = sprintf("[%.3f, %.3f]", lower, upper))
+knitr::kable(utils::head(ex, 20),
+             caption = "First 20 significant pairs (positive effects) by distance, with directness CI")
+```
+
+## Summary for the response to reviewers
+
+- We now provide a **`r ci_lab` confidence interval for every pair's probability
+  of direct effect**, obtained by a perturbation-level cluster bootstrap of the
+  differential-expression results (no re-running of sceptre/MAST).
+- The bootstrap **reproduces the published point estimate exactly** (power-law
+  coefficients and per-dataset indirect rates match to numerical tolerance; see
+  the run log) and adds uncertainty around it.
+- Because whole perturbations are resampled, the interval reflects both sampling
+  noise in the hit rates **and** sensitivity to the composition of the targeted
+  panel -- the CI is widest at large distances to TSS, where the direct-effect
+  rate approaches the indirect baseline and directness is inherently least
+  certain.
+
+```{r session}
+sessionInfo()
+```

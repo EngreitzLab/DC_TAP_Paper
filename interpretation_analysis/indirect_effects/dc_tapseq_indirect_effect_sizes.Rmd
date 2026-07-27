@@ -1,0 +1,253 @@
+---
+title: "DC-TAP-seq indirect effect sizes"
+author: "Andreas R. Gschwind"
+date: "July 23, 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+```{r setupDocument, include=FALSE}
+# set output html chunk options
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+# suppress dplyrs summarize info
+options(dplyr.summarize.inform = FALSE)
+```
+
+```{r requiredPackages, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(cowplot)
+```
+
+## Goal
+Plot effect sizes of indirect effects in K562 and WTC11 DC-TAP-seq datasets.
+```{r}
+# path to indirect effects analysis output (adjust to reproduce)
+indirect_effects_dir <- "/oak/stanford/groups/engreitz/Users/agschwin/distal_regulation_paper/CRISPR_indirect_effects_FDR_check/results"
+
+# path to Gasperini et al indirect effects analysis output (adjust to reproduce)
+gasp_dir <- "/oak/stanford/groups/engreitz/Users/agschwin/distal_regulation_paper/ENCODE_CRISPR_data/results/Gasperini2019"
+```
+
+***
+
+## Used data
+Sceptre and MAST output used to calculated indirect effect rates across all datasets is used to
+analyze effect sizes of detected significant indirect effects.
+```{r}
+# all output files for sceptre-based trans-acting effect tests
+scpt_datasets <- c("K562_DC_TAPseq", "WTC11_DC_TAPseq", "Klann2021", "Xie2019", "Morris2023_v1", "Morris2023_v2")
+scpt_files <- file.path(indirect_effects_dir, scpt_datasets, "results_run_discovery_analysis.rds")
+names(scpt_files) <- scpt_datasets
+
+# load all sceptre result files
+sceptre_trans_results <- lapply(scpt_files, FUN = readRDS)
+
+# all output files for sceptre-based cis analysis
+cis_files <- file.path(indirect_effects_dir, scpt_datasets, "annotated_cis_results.tsv.gz")
+names(cis_files) <- scpt_datasets
+
+# load all cis analysis results
+sceptre_cis_results <- lapply(cis_files, FUN = read_csv, show_col_types = FALSE)
+
+# gasperini et al trans and cis result files
+gasp_trans_file <- file.path(gasp_dir, "trans_effects/output_trans_effects_MAST_perCRE.tsv.gz")
+#gasp_cis_file <- file.path(gasp_dir, "diff_expr/output_MAST_perCRE.tsv.gz")
+gasp_encode_file <- file.path(gasp_dir, "../ENCODE/ENCODE_Gasperini2019_0.13gStd_MAST_perCRE_GRCh38.tsv.gz")
+
+# load gasperini files
+gasp_trans_results <- read_tsv(gasp_trans_file, show_col_types = FALSE)
+#gasp_cis_results <- read_tsv(gasp_cis_file, show_col_types = FALSE)
+gasp_encode <- read_tsv(gasp_encode_file, show_col_types = FALSE)
+
+# load gene universe file
+gene_univ <- read_tsv("/oak/stanford/groups/engreitz/Users/agschwin/distal_regulation_paper/CRISPR_benchmarks/resources/genome_annotations/CollapsedGeneBounds.hg38.TSS500bp.bed",
+                      show_col_types = FALSE)
+```
+
+***
+
+## Extract effect sizes for sigificant indirect hits
+Filter trans differential expression results using the same filters applied ot calculate indirect
+effect rates and extract indirect effect sizes.
+
+### Sceptre based results
+```{r}
+# helper function to extract significant indirect effects for one dataset
+get_indirect_effects <- function(trans_results, cis_results, gene_univ) {
+  
+  # get significance threshold for cis effects
+  pval_threshold_cis <- cis_results %>% 
+    filter(significant == TRUE) %>% 
+    pull(p_value) %>% 
+    max()
+  
+  # add significance and regulated column to trans-effect results based on cis significance threshold
+  trans_results <- trans_results %>% 
+    mutate(significant = p_value <= pval_threshold_cis,
+           regulated_negative = significant & log_2_fold_change < 0,
+           regulated_positive = significant & log_2_fold_change >= 0)
+  
+  # get all valid elements from cis results
+  valid_elements <- cis_results %>% 
+    filter(valid_element == TRUE) %>% 
+    pull(grna_target) %>% 
+    unique()
+  
+  # add a valid connection column to trans-results based on whether perturbation is a valid element
+  trans_results <- mutate(trans_results, valid_connection = grna_target %in% valid_elements)
+  
+  # filter trans results for valid connections and only retain data on gene universe
+  trans_results_filt <- trans_results %>% 
+    filter(valid_connection == TRUE, pass_qc == TRUE) %>% 
+    filter(response_id %in% gene_univ$Ensembl_ID)
+  
+  # extract significantly regulated indirect effects
+  indirect_effects <- trans_results_filt %>% 
+    filter(regulated_negative == TRUE | regulated_positive == TRUE) %>% 
+    mutate(effect_direction = case_when(
+      regulated_negative & regulated_positive ~ "both (ERROR)",
+      regulated_negative ~ "negative",
+      regulated_positive ~ "positive",
+      TRUE ~ NA_character_
+    ))
+  
+  return(indirect_effects)
+}
+
+# helper function to convert log-fold changes to percentage changes
+logFC_to_pctChange <- function(logFC, base = exp(1)) {
+  pct_change <- base ^ logFC - 1
+  return(pct_change)
+}
+```
+
+```{r}
+# extract significant indirect effects for both dataset
+indirect_effects <- mapply(FUN = get_indirect_effects, sceptre_trans_results, sceptre_cis_results,
+                           MoreArgs = list(gene_univ = gene_univ), SIMPLIFY = FALSE)
+
+# combine into one table and convert effect sizes from log2FC to percent change in expression
+indirect_effects <- indirect_effects %>% 
+  bind_rows(.id = "dataset") %>% 
+  mutate(pct_change = logFC_to_pctChange(log_2_fold_change, base = 2))
+```
+
+### MAST based results (Gasperini dataset)
+```{r}
+# get valid enhancers for gasperini dataset based on ENCODE output
+enh_filter <- c("overlaps potential promoter", "TSS targeting guide(s)")
+gasp_valid_enh <- gasp_encode %>% 
+  filter(!ValidConnection %in% enh_filter) %>% 
+  pull(PerturbationTargetID)
+
+# add ValidConnection column to gasperini trans-results
+gasp_trans_results <- gasp_trans_results %>% 
+  mutate(pert_id = paste0(pert_chr, ":", pert_start, "-", pert_end, ":.")) %>% 
+  mutate(ValidConnection = if_else(pert_id %in% gasp_valid_enh, true = "TRUE",
+                                   false = "Invalid enhancer"))
+
+# filter trans results based on ValidConnection
+gasp_trans_results <- filter(gasp_trans_results, ValidConnection == "TRUE")
+
+# extract significantly regulated indirect effects
+gasp_trans_results <- gasp_trans_results %>% 
+  filter(regulated_negative == TRUE | regulated_positive == TRUE) %>% 
+  mutate(effect_direction = case_when(
+    regulated_negative & regulated_positive ~ "both (ERROR)",
+    regulated_negative ~ "negative",
+    regulated_positive ~ "positive",
+    TRUE ~ NA_character_
+  ))
+
+# convert effect sizes from log2FC to percent change in expression
+gasp_trans_results <- gasp_trans_results %>% 
+  mutate(pct_change = logFC_to_pctChange(logFC, base = exp(1)))
+```
+
+### Combine into one table
+```{r}
+# select relevant columns and combine from sceptre based trans results
+indirect_effects <- indirect_effects %>% 
+  select(dataset, perturbation = grna_target, gene = response_id, regulated_negative,
+         regulated_positive, effect_direction, pct_change)
+
+# select relevant columns and combine from gasperini trans results
+gasp_trans_results <- gasp_trans_results %>% 
+  mutate(dataset = "Gasperini2019") %>% 
+  select(dataset, perturbation, gene, regulated_negative, regulated_positive, effect_direction,
+         pct_change)
+
+# combine into one table
+indirect_effects <- bind_rows(indirect_effects, gasp_trans_results)
+```
+
+***
+
+## Plot indirect effect sizes
+
+Group data for plots: 1 = K562 DC-TAP-seq, 2 = WTC11 DC-TAP-seq, 3 = Other datasets.
+```{r}
+# redefine datasets to group data for plots
+indirect_effects <- indirect_effects %>% 
+  mutate(dataset_plot = case_when(
+    dataset == "K562_DC_TAPseq" ~ "K562",
+    dataset == "WTC11_DC_TAPseq" ~ "WTC11",
+    TRUE ~ "Other datasets"
+  )) %>% 
+  mutate(dataset_plot = factor(dataset_plot, levels = c("K562", "WTC11", "Other datasets")))
+```
+
+```{r}
+# label outliers in each plotted distribution for filtering to prevent long tails on violin plots
+indirect_effects <- indirect_effects %>%
+  group_by(dataset_plot, effect_direction) %>% 
+  mutate(outlier = !between(pct_change, 
+         quantile(pct_change, 0.25) - 1.5 * IQR(pct_change),
+         quantile(pct_change, 0.75) + 1.5 * IQR(pct_change)))
+
+# calculate percentage of outlier points removed per distribution
+indirect_effects <- indirect_effects %>% 
+  mutate(total_pairs = n(),
+         outlier_pairs = sum(outlier),
+         pct_outliers = outlier_pairs / total_pairs)
+
+# filter out outlier points
+indirect_effects_filt <- filter(indirect_effects, outlier == FALSE)
+
+# create labels with number of hits for plots
+indirect_effects_filt <- indirect_effects_filt %>% 
+  mutate(filt_pairs = n()) %>% 
+  mutate(label = paste0(effect_direction, "\n(n = ", filt_pairs, " trans-pairs,\n", outlier_pairs,
+                        " outliers removed)"))
+```
+
+
+Plot effect sizes for negative and positive indirect effects as violin plots.
+```{r, fig.height=4, fig.width=11}
+# plot effect sizes of indirect effects as violin plots
+ggplot(indirect_effects_filt, aes(x = label, y = pct_change, fill = effect_direction)) +
+  facet_wrap(~dataset_plot, drop = TRUE, scales = "free") +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.5) +
+  geom_violin() +
+  geom_boxplot(color = "black", fill = NA, outlier.shape = NA, width = 0.2) +
+  labs(y = "CRISPR effect size\n(% change in expression)", x  = "Indirect effect direction") +
+  scale_fill_manual(values = c("firebrick3", "steelblue")) +
+  scale_y_continuous(limits = range(indirect_effects_filt$pct_change), labels = scales::percent) +
+  theme_classic() +
+  theme(legend.position = "none", strip.background = element_blank())
+
+# save plot to pdf
+ggsave(file = "plots/indirect_effect_sizes_violin.pdf", height = 4, width = 11, create.dir = TRUE)
+```
+
+***
+
+## Session information
+This document was produced using following packages:
+```{r sessionInfo}
+sessionInfo()
+```

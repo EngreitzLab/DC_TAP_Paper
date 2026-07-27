@@ -1,0 +1,200 @@
+---
+title: "Genome-wide indirect effects"
+author: "Andreas R. Gschwind"
+date: "July 23, 2026"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+---
+
+```{r setupDocument, include=FALSE}
+# set output html chunk options
+knitr::opts_chunk$set(warning = FALSE)
+
+# suppress dplyrs summarize info
+options(dplyr.summarize.inform = FALSE)
+```
+
+```{r attachPackages, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(cowplot)
+```
+
+## Goal
+Analyze genome-wide indirect effects calculated for all perturbations and genes in the Gasperini et
+al., 2019 dataset.
+
+***
+
+## Used data
+Load indirect effect rates for all genes and elements in the Gasperini et al., 2019 datasets
+calculated from  sceptre differential expression tests for trans-acting effects of all enhancer perturbations.
+```{r}
+# load indirect effect rates per gene
+indirect_effects_genes <- read_tsv("gasperini2019_indirect_effects_per_gene.tsv.gz", show_col_types = FALSE)
+indirect_effects_elements <- read_tsv("gasperini2019_indirect_effects_per_element.tsv.gz", show_col_types = FALSE)
+```
+
+***
+
+## Indirect effects vs. TPM
+Plot relationship between indirect effect rate vs. target gene TPM.
+```{r, fig.height=4, fig.width=6}
+# create plotting labels for genes in K562 DC-TAP-seq target gene panels
+indirect_effects_genes <- indirect_effects_genes %>% 
+  mutate(dc_tap_group = if_else(k562_dc_tap_gene == TRUE, true = "K562 DC-TAP-seq targets",
+                                false = "Other genes")) %>% 
+  mutate(dc_tap_group = fct_relevel(dc_tap_group, "Other genes")) %>% 
+  arrange(dc_tap_group)
+
+# filter for genes within custom TPM range for plot
+indirect_effects_tpm_range <- indirect_effects_genes %>% 
+  filter(tpm >= 10, tpm <= 1e4)
+
+# plot indirect effects rate vs target gene TPM
+ggplot(indirect_effects_tpm_range, aes(x = tpm, y = trans_hit_rate, color = dc_tap_group)) +
+  geom_point() +
+  geom_smooth(aes(group = 1), method = "lm", se = FALSE, color = "black") +
+  labs(title = "Indirect effects rate vs. TPM", x = "Target gene TPM",
+       y = "Indirect effects rate", color = "Gene type") +
+  scale_color_manual(values = c("K562 DC-TAP-seq targets" = "steelblue", "Other genes" = "gray")) +
+  scale_x_log10() +
+  theme_classic()
+```
+
+The positive relationship between the observed indirect effects rate and target gene expression
+level is likely driven by higher statistical power to detect differential expression effects for
+genes with higher UMI counts.
+
+Therefore to compare indirect effect rates between DC-TAP-seq target genes and other genes, we need
+to match TPM distributions of the two groups.
+
+## Compare indirect effects
+Compare indirect effects rates between K562 DC-TAP-seq target genes versus a sample of other genes
+expressed with similar TPM distribution.
+```{r}
+# split genes into the two groups to compare
+target_genes <- filter(indirect_effects_genes, k562_dc_tap_gene == TRUE)
+other_genes  <- filter(indirect_effects_genes, k562_dc_tap_gene == FALSE)
+
+# restrict other genes to the TPM range spanned by the DC TAP-seq target genes, so the matched
+# sample can only contain genes expressed within that range
+tpm_range <- range(target_genes$tpm)
+other_genes <- filter(other_genes, tpm >= tpm_range[1], tpm <= tpm_range[2])
+
+# define TPM bins (log10 scale) from deciles of the target genes' TPM distribution; the outer
+# breaks equal the min/max target TPM, which now also bound the other genes
+tpm_breaks <- quantile(log10(target_genes$tpm), probs = seq(0, 1, length.out = 11))
+
+target_genes <- mutate(target_genes, tpm_bin = cut(log10(tpm), tpm_breaks, include.lowest = TRUE))
+other_genes  <- mutate(other_genes,  tpm_bin = cut(log10(tpm), tpm_breaks, include.lowest = TRUE))
+
+# number and proportion of target genes per TPM bin (the TPM distribution to match), plus the number
+# of other genes available in each bin
+n_per_bin <- target_genes %>%
+  count(tpm_bin, name = "n_target") %>%
+  mutate(prop_target = n_target / sum(n_target)) %>%
+  left_join(count(other_genes, tpm_bin, name = "n_other_avail"), by = "tpm_bin") %>%
+  mutate(n_other_avail = coalesce(n_other_avail, 0L))
+
+# sample as many "Other genes" as possible while keeping their per-bin proportions identical to the
+# target genes' TPM distribution. The largest achievable total is set by the bin that runs out of
+# available genes first: scale each bin's target proportion up by the maximum factor for which no bin
+# exceeds its available genes, then take that many per bin.
+scale_factor <- min(n_per_bin$n_other_avail / n_per_bin$prop_target)
+n_per_bin <- mutate(n_per_bin, n_other = floor(scale_factor * prop_target))
+
+# sample the computed number of "Other genes" per TPM bin
+set.seed(20260710)
+matched_other_genes <- other_genes %>%
+  group_by(tpm_bin) %>%
+  group_modify(~ slice_sample(.x, n = n_per_bin$n_other[n_per_bin$tpm_bin == .y$tpm_bin])) %>%
+  ungroup()
+
+# combine target genes with the TPM-matched sample of other genes
+indirect_effects_tpm_matched <- bind_rows(target_genes, matched_other_genes)
+```
+
+Sanity check: the TPM distributions of the two groups should overlap after matching.
+```{r, fig.height=4, fig.width=6}
+# plot TPM density of both groups to confirm the matching worked
+ggplot(indirect_effects_tpm_matched, aes(x = tpm, fill = dc_tap_group, color = dc_tap_group)) +
+  geom_density(alpha = 0.3) +
+  labs(title = "TPM distributions after matching", x = "Target gene TPM", y = "Density",
+       fill = "Gene type", color = "Gene type") +
+  scale_color_manual(values = c("K562 DC-TAP-seq targets" = "steelblue", "Other genes" = "gray")) +
+  scale_fill_manual(values = c("K562 DC-TAP-seq targets" = "steelblue", "Other genes" = "gray")) +
+  scale_x_log10() +
+  theme_classic()
+```
+
+```{r, fig.height=4, fig.width=4}
+# test for a difference in indirect effect rates between the two groups. The groups are independent
+# and the rates are non-normal, so use a two-sided Wilcoxon rank-sum (Mann-Whitney U) test
+rate_test <- wilcox.test(trans_hit_rate ~ dc_tap_group, data = indirect_effects_tpm_matched)
+rate_test
+
+# add sample sizes to labels
+indirect_effects_tpm_matched <- indirect_effects_tpm_matched %>% 
+  add_count(k562_dc_tap_gene, name = "n") %>% 
+  mutate(dc_tap_group = paste0(dc_tap_group, "\n(n = ", n, " )" ))
+
+# compare indirect effect rates between K562 target genes any other 30+ TPM genes
+p1 <- ggplot(indirect_effects_tpm_matched,
+             aes(x = dc_tap_group, y = trans_hit_rate, color = dc_tap_group)) +
+  geom_jitter(width = 0.2) +
+  geom_boxplot(outlier.shape = NA, fill = NA, color = "black", width = 0.25, notch = TRUE) +
+  labs(y = "Indirect effects rate", title = "Indirect effects per gene",
+       subtitle = paste0("Wilcoxon rank-sum p = ", signif(rate_test$p.value, 2))) +
+  scale_color_manual(values = c("steelblue", "gray")) +
+  theme_classic() +
+  theme(legend.position = "none", axis.title.x = element_blank())
+
+p1
+```
+
+***
+
+## Per-element indirect effect rates
+```{r, fig.height=4, fig.width=4}
+# test for a difference in indirect effect rates between the two groups. The groups are independent
+# and the rates are non-normal, so use a two-sided Wilcoxon rank-sum (Mann-Whitney U) test
+rate_test <- wilcox.test(trans_hit_rate ~ k562_dc_tap_element, data = indirect_effects_elements)
+rate_test
+
+# add new labels for elements
+indirect_effects_elements <- indirect_effects_elements %>% 
+  mutate(element_group = if_else(k562_dc_tap_element == TRUE, true = "K526 DC-TAP-seq element",
+                                 false = "Other elements")) %>% 
+  add_count(k562_dc_tap_element, name = "n") %>% 
+  mutate(element_group = paste0(element_group, "\n(n = ", n, " )" ))
+
+# make plot
+p2 <- ggplot(indirect_effects_elements,
+             aes(x = element_group, y = trans_hit_rate, color = element_group)) +
+  geom_jitter(width = 0.2) +
+  geom_boxplot(outlier.shape = NA, fill = NA, color = "black", width = 0.25, notch = TRUE) +
+  labs(y = "Indirect effects rate", title = "Indirect effects per element",
+       subtitle = paste0("Wilcoxon rank-sum p = ", signif(rate_test$p.value, 2))) +
+  scale_y_sqrt() +
+  scale_color_manual(values = c("steelblue", "gray")) +
+  theme_classic() +
+  theme(legend.position = "none", axis.title.x = element_blank())
+
+p2
+```
+
+```{r, fig.height=3, fig.width=7}
+# arrange plots into figure
+plot_grid(p1, p2, nrow = 1)
+ggsave(filename = "../plots/indirect_rates_gasperini.pdf", height = 3, width = 7, create.dir = TRUE)
+```
+
+
+## Session information
+This document was produced using following packages:
+```{r sessionInfo}
+sessionInfo()
+```
