@@ -77,3 +77,6 @@ validations/src/python/__pycache__/
 
 # macOS
 .DS_Store
+
+# Internal working docs (not part of the public submission)
+HANDOFF.md
