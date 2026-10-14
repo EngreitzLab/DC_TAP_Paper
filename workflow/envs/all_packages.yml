@@ -10,7 +10,7 @@ dependencies:
   - conda-forge::libxml2
   - conda-forge::openssl
   - conda-forge::gcc
-  - jgalante::r-sceptre
+  - jgalante::r-sceptre==0.10.1=r44_0  # sha256 0ac0ea3dfbc1a9081d0991d5b41ee9f3869e910ca379e8ae1894bbc2f39640a8; built from Katsevich-Lab/sceptre tag v0.10.1 (commit 43a4534; DESCRIPTION reports 0.10.0), identified by matching installed code to upstream history
   - bioconductor-rtracklayer
   - bioconductor-genomicranges
   - bioconductor-singlecellexperiment

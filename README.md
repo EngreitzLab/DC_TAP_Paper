@@ -75,11 +75,40 @@ Supplementary Tables:
   snakemake --use-conda --cores <N>
   ```
   This builds the final results table (`results/formatted_dc_tap_results/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements.tsv`), the supplementary tables, and Figures 1–2. The published Table S3 (`Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv`) is this same table with a small set of annotation columns appended in a manual step downstream of `rule all`.
-- Figure 3 and the interpretation-analysis figures:
+- All data panels of main Figures 1–6, in one command (top-level environment from `pixi.toml`; Figures 1–3 rules build their own conda environments from `workflow/envs/`):
   ```
-  snakemake --use-conda --cores <N> results/main_figure_3/craete_main_figure_3.done
+  pixi install
+  bash workflow/scripts/link_large_inputs.sh <directory holding the large inputs>   # see below
+  pixi run main-figures      # = workflow/scripts/run_main_figures.sh; ~55 min on 8 cores incl. building conda envs (tested on Sherlock, 2026-10-13)
   ```
-- Figures 4, 5, 6, S3, and S4a are produced by directly running `interpretation_analysis/dc_tap_analysis.run.R` and `interpretation_analysis/dc_tapseq_indirect_effects.Rmd` — see `interpretation_analysis/README.md`.
+  Figures 4–6 need only files in the repository and can be made on their own (no conda, ~1 min):
+  ```
+  pixi run snakemake --cores 4 create_main_figures_4_5_6
+  ```
+  A few large inputs (CellRanger `.h5` files for Fig. 1e, replicate SCEPTRE objects for Fig. 2d, WTC11 count matrices for Fig. 2h, reprocessed Gasperini et al. results for Figs. 2f and 3a,b) are not in the repository; they are listed in `config/large_inputs_on_sherlock.txt` and are currently stored on the Stanford Sherlock cluster.
+
+  | Panel | Rule (`workflow/`) | Script | Output |
+  |---|---|---|---|
+  | 1e | `downsampling_reads_for_UMIs` | `scripts/main_figure_1_and_2/downsampling_reads_for_UMIs.R` | `results/main_figure_1_and_2/downsampling_reads_for_UMIs/read_umi_saturation_comparison.pdf` |
+  | 2b | `distance_by_effect_size_plots` | `scripts/main_figure_1_and_2/distance_by_effect_size_plots.R` | `results/main_figure_1_and_2/{k562,wtc11}_distance_by_es.pdf` |
+  | 2c | `effect_size_plots` | `scripts/main_figure_1_and_2/effect_size_plots.R` | `results/main_figure_1_and_2/effect_size_boxplot.pdf`, `positive_control_self_promoters_effect_size_boxplot.pdf` |
+  | 2d | `wtc11_multi_moi`, `make_replicates_plots` | `scripts/main_figure_1_and_2/wtc11_multi_moi.R`, `make_replicates_plots.R` | `results/main_figure_1_and_2/wtc11_multi_moi.pdf`, `compare_replicates/wtc11_plot.pdf` |
+  | 2e | `compare_k562_effect_sizes_to_qPCR` | `scripts/main_figure_1_and_2/compare_k562_effect_sizes_to_qPCR.R` | `results/main_figure_1_and_2/compare_k562_effect_sizes_to_qPCR/comparison_*.pdf` |
+  | 2f | `find_duplicate_pairs` | `scripts/main_figure_1_and_2/find_duplicate_pairs.R` | `results/main_figure_1_and_2/duplicate_pairs_analysis/duplicate_pairs.pdf` |
+  | 2h | `negative_targeting_confidence_interval`, `slc2a3_effect_size_plot` | `scripts/main_figure_1_and_2/slc2a3_effect_size_plot.R` | `results/main_figure_1_and_2/slc2a3_effect_size_barplot.pdf` |
+  | 3a | `compare_effect_sizes_to_other_screens` | `scripts/main_figure_3/` | `results/main_figure_3/compare_effect_sizes_to_other_screens/effect_size_comparison.pdf` |
+  | 3b | `power_to_detect_change_for_all_datasets` | `scripts/main_figure_3/` | `results/main_figure_3/power_to_detect_change_for_all_datasets/*.pdf` |
+  | 3c | `main_figure_5_chromatin_categories` | `results/main_figure_5_and_6/chromatin_categories_and_power_estimation.R` | `results/main_figure_5_and_6/housekeeping_genes/detected_positives/` |
+  | 4b–d | `main_figure_4_direct_indirect_effects` | `results/main_figure_4_direct_indirect_effects/dc_tapseq_indirect_effects.Rmd` | `results/main_figure_4_direct_indirect_effects/plots/` |
+  | 5b | `main_figure_5_chromatin_categories` | `results/main_figure_5_and_6/chromatin_categories_and_power_estimation.R` | `results/main_figure_5_and_6/categorized_pairs/proportion_by_cell_type.element_category.de_weighted.combine_dc_tap.pdf` |
+  | 5c,d | `main_figure_5_chromatin_categories`, `main_figure_5_housekeeping_genes` | `chromatin_categories_and_power_estimation.R`, `housekeeping_genes.R` | `results/main_figure_5_and_6/{housekeeping_genes,hkg_comparison}/` |
+  | 6a–d | `main_figure_6_model_scores` | `results/main_figure_5_and_6/model_scores.R` | `results/main_figure_5_and_6/e2g_model_scores/ENCODE_rE2G/` (ABC and AlphaGenome for Extended Data Fig. 13 in sibling folders) |
+
+  Panels 1a,b, 2a, 4a and 5a are schematics, and 2g is a genome-browser view.
+- Inputs to Figures 4–6 come from other pipelines and are checked in as derived tables:
+  - `resources/main_figure_4/indirect_effects/`: output of [CRISPR_indirect_effects](https://github.com/EngreitzLab/CRISPR_indirect_effects) (cis/trans hit rates and the direct-effect model)
+  - `resources/main_figure_6/expt_pred_merged_annot.txt.gz`: output of the [CRISPR_comparison](https://github.com/EngreitzLab/CRISPR_comparison) benchmarking pipeline for DC-TAP-seq pairs
+  - `results/main_figure_5_and_6/categorized_pairs/`: chromatin-categorized CRISPR pairs. Re-creating these (`chromatin_categories_and_power_estimation.R categorize`) needs chrom-annotate and ENCODE-rE2G outputs that are not in the repository.
 - CellRanger outputs are available from NCBI GEO under accession `GSE303901` (see **Data and code availability** below); download them into `resources/process_validation_datasets/{K562,WTC11}_DC_TAP_Seq/cell_ranger_output/` to run `sceptre_setup.smk` from scratch.
 
 ## System Requirements

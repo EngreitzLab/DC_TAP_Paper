@@ -174,19 +174,20 @@ plot_score_by_category <- function(crispr, group_var, significance_var, e2g_thre
 
 
 ### MAIN
-project_dir <- "/oak/stanford/groups/engreitz/Users/sheth/ENCODE_rE2G_main/2025_0227_CTCF_and_H3K27ac"
-results_dir <- file.path(project_dir, "results", "2026_0626_dc_tap_revisions"); dir.create(results_dir, showWarnings = FALSE)
+# usage: Rscript model_scores.R [crispr_benchmark_file] [results_dir]  (run from the repository root)
+args <- commandArgs(trailingOnly = TRUE)
+crispr_benchmark_file <- if (length(args) >= 1) args[1] else "resources/main_figure_6/expt_pred_merged_annot.txt.gz"
+results_dir <- if (length(args) >= 2) args[2] else "results/main_figure_5_and_6"
+dir.create(results_dir, showWarnings = FALSE, recursive = TRUE)
 
-#  benchmarking version of elements: has ENCODE_rE2G, ABCdnase, AlphaGenome_RNAScorer
-crispr_benchmark_file <- "/home/groups/engreitz/Users/emattei/git/CRISPR_comparison/results/DC_TAPseq_filtered/expt_pred_merged_annot.txt.gz"
+#  benchmarking version of elements (CRISPR_comparison pipeline output): has ENCODE_rE2G, ABCdnase, AlphaGenome_RNAScorer
 models <- c("ENCODE_rE2G", "ABCdnase", "AlphaGenome_RNAScorer")
 score_cols <- c("Score", "ABC.Score", "normalized_score")
 model_score_names <- c("ENCODE-rE2G score", "ABC score", "AlphaGenome RNA gradient score")
 thresholds <- c(0.201, 0.018, 11.837)
 
-# --- plot ENCODE-rE2G score comparisons --- #
-if (TRUE) {
-  index <- 2
+# --- plot model score comparisons: ENCODE-rE2G (Fig. 6), ABC and AlphaGenome (Extended Data Fig. 13) --- #
+for (index in seq_along(models)) {
   model_id <- paste0(models[index], ".", score_cols[index])
   e2g_threshold <- thresholds[index]
   score_name <- model_score_names[index]

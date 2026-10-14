@@ -1,6 +1,10 @@
 # config file containing parameters
 configfile: "config/config.yml"
 
+# several R scripts save intermediate objects here
+import os
+os.makedirs("RDA_objects", exist_ok=True)
+
 # Include all rules for processing validation datasets
 include: "rules/sceptre_setup.smk"
 include: "rules/sceptre_power_analysis.smk"
@@ -13,6 +17,7 @@ include: "rules/formatting_dc_tap_results.smk"
 include: "rules/supplementary_tables.smk"
 include: "rules/main_figure_1_and_2.smk"
 include: "rules/main_figure_3.smk"
+include: "rules/main_figure_4_5_6.smk"
 include: "rules/duplicate_pairs_analysis.smk"
 
 include: "rules/figures_wo_positive_controls.smk"
@@ -39,7 +44,8 @@ rule create_main_figure_1_and_2:
     k562_replicates_fig2 = "results/main_figure_1_and_2/compare_replicates/k562_plot.pdf", 
     wtc11_replicates_fig2 = "results/main_figure_1_and_2/compare_replicates/wtc11_plot.pdf", 
     dc_tap_x_qpcr_fig2 = "results/main_figure_1_and_2/compare_k562_effect_sizes_to_qPCR/comparison_others.pdf",
-    duplicates_plot_fig2 = "results/main_figure_1_and_2/duplicate_pairs_analysis/duplicate_pairs.pdf"
+    duplicates_plot_fig2 = "results/main_figure_1_and_2/duplicate_pairs_analysis/duplicate_pairs.pdf",
+    slc2a3_effect_sizes_fig2 = "results/main_figure_1_and_2/slc2a3_effect_size_barplot.pdf"
   output:
     touch("results/main_figure_1_and_2/create_main_figure_1_and_2.done")
     
@@ -50,8 +56,23 @@ rule create_main_figure_3:
     power_for_all_datasets_by_proportion = "results/main_figure_3/power_to_detect_change_for_all_datasets/power_for_all_datasets_by_proportion.pdf",
     power_for_all_datasets_by_count = "results/main_figure_3/power_to_detect_change_for_all_datasets/power_for_all_datasets_by_count.pdf"
   output:
-    touch("results/main_figure_3/craete_main_figure_3.done")
+    touch("results/main_figure_3/create_main_figure_3.done")
     
+# Main Figures 4-6 (and Fig. 3c), from tables in the repository
+rule create_main_figures_4_5_6:
+  input:
+    rules.main_figure_4_direct_indirect_effects.output,
+    rules.main_figure_5_chromatin_categories.output,
+    rules.main_figure_5_housekeeping_genes.output,
+    rules.main_figure_6_model_scores.output
+
+# All data panels of main Figures 1-6
+rule make_main_figures:
+  input:
+    "results/main_figure_1_and_2/create_main_figure_1_and_2.done",
+    "results/main_figure_3/create_main_figure_3.done",
+    rules.create_main_figures_4_5_6.input
+
 # Create the supplementary tables
 rule create_all_supplementary_tables:
   input:

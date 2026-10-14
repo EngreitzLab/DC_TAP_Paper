@@ -7,6 +7,10 @@ output:
     toc: true
     toc_float: true
     code_folding: show
+params:
+  indirect_effects_dir: "../../resources/main_figure_4/indirect_effects"
+  table_s3_file: "../formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
+  plots_dir: "./plots"
 ---
 
 ```{r setupDocument, include=FALSE}
@@ -50,11 +54,13 @@ This analysis uses the output of the
 analysis workflow as input. Probabilities of direct effects for K562 and WTC11 DC-TAP-seq
 experiments calculated by this workflow can be found in Table S3.
 ```{r}
-# adjust path to indirect effects analysis output as needed to reproduce results
-indirect_effects_dir <- "../../CRISPR_indirect_effects_FDR_check/results"
+# output of the CRISPR_indirect_effects workflow (copied into resources/main_figure_4/indirect_effects)
+indirect_effects_dir <- params$indirect_effects_dir
 
-# adjust path to table S3 as needed to reproduce results
-table_s3_file <- "./Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
+# Table S3
+table_s3_file <- params$table_s3_file
+plots_dir <- params$plots_dir
+dir.create(plots_dir, showWarnings = FALSE, recursive = TRUE)
 ```
 
 First we load all requied input files from the indirect effects analysis:
@@ -216,7 +222,7 @@ ggplot(cis_rates_plot,
 
 ```{r savePlot1, echo=FALSE}
 # save plot to pdf
-ggsave(file = "./plots/cis_and_trans_effect_rates.pdf", height = 4, width = 8)
+ggsave(file = file.path(plots_dir, "cis_and_trans_effect_rates.pdf"), height = 4, width = 8)
 ```
 
 #### Probability of direct effect
@@ -262,7 +268,7 @@ ggplot(random_pairs_plot, aes(x = dist_to_tss / 1e3, y = direct_vs_indirect, col
 
 ```{r savePlot2, echo=FALSE}
 # save plot to pdf
-ggsave(file = "./plots//probability_direct_vs_indirect.pdf", height = 4, width = 6)
+ggsave(file = file.path(plots_dir, "probability_direct_vs_indirect.pdf"), height = 4, width = 6)
 ```
 
 ***
@@ -442,7 +448,7 @@ ggplot(pairs_p90_combined_plot,
 
 ```{r, savePlot3, echo=FALSE}
 # save plot to pdf
-ggsave(file = "./plots//negative_vs_positive_effects_combined.pdf", height = 4, width = 3.5)
+ggsave(file = file.path(plots_dir, "negative_vs_positive_effects_combined.pdf"), height = 4, width = 3.5)
 ```
 
 Alternatively, we can also look at this by plotting the observed CRISPR effect size on target gene
@@ -466,7 +472,7 @@ ggplot(random_pairs_hits, aes(x = cell_type, y = log_2_FC_effect_size, color = f
 
 ```{r savePlot4, echo=FALSE}
 # save plot to pdf
-ggsave(file = "./plots//probability_direct_vs_effect_size.pdf", height = 4, width = 6)
+ggsave(file = file.path(plots_dir, "probability_direct_vs_effect_size.pdf"), height = 4, width = 6)
 ```
 
 ***

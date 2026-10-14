@@ -1,0 +1,31 @@
+[workspace]
+name = "dc_tap_paper"
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "osx-arm64"]
+
+# Sherlock (CentOS 7) has glibc 2.17
+[system-requirements]
+libc = { family = "glibc", version = "2.17" }
+
+# Top-level environment: Snakemake (+ conda, for the per-rule envs in workflow/envs/)
+# and the R packages used by the Figure 4-6 rules, which run directly in this environment.
+[dependencies]
+python = "3.11.*"
+snakemake-minimal = "7.32.*"
+pulp = "<2.8"
+conda = "*"
+r-base = "4.4.*"
+r-tidyverse = "*"
+"r-data.table" = "*"
+r-ggdist = "*"
+r-cowplot = "*"
+r-ggextra = "*"
+r-dt = "*"
+r-rmarkdown = "*"
+r-knitr = "*"
+pandoc = "*"
+"r-r.utils" = ">=2.13.0,<3"
+
+[tasks]
+main-figures = "bash workflow/scripts/run_main_figures.sh"
+
