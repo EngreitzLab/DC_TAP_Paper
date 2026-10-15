@@ -1,0 +1,264 @@
+---
+title: "2026-05-11 SCEPTRE - Create Objects"
+output: html_document
+params:
+  moi_level: "low"
+  sample_list:
+    - MOI1_1
+  covariate_columns:
+    - channel
+  prefix: "MOI1_1"
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(data.table)
+  library(here)
+  library(Seurat)
+  library(Matrix)
+})
+
+if (!requireNamespace("sceptre", quietly = TRUE)) {
+  stop("Package 'sceptre' is required. Install with renv::install('katsevich-lab/sceptre').")
+}
+
+get_dynamic_formula <- function(covariate_df, requested_covariates) {
+  keep_covariates <- character(0)
+  for (cov in requested_covariates) {
+    if (cov %in% colnames(covariate_df) && 
+        data.table::uniqueN(na.omit(covariate_df[[cov]])) > 1) {
+      keep_covariates <- c(keep_covariates, cov)
+    }
+  }
+  rhs_terms <- c(
+    "log(response_n_nonzero)",
+    "log(response_n_umis)",
+    "log(grna_n_nonzero)",
+    "log(grna_n_umis)",
+    keep_covariates
+  )
+  stats::as.formula(paste("~", paste(rhs_terms, collapse = " + ")))
+}
+
+get_discovery_pairs <- function(table_s3) {
+  required_cols <- c("cell_type", "intended_target_name_hg38", "gene_id")
+  if (!all(required_cols %in% colnames(table_s3))) {
+    stop("Table S3 is missing required columns.")
+  }
+
+  discovery_pairs <- unique(
+    table_s3[
+      cell_type == "WTC11" &
+        !is.na(intended_target_name_hg38) & nzchar(intended_target_name_hg38) &
+        !is.na(gene_id) & nzchar(gene_id),
+      .(
+        grna_target = intended_target_name_hg38,
+        response_id = gene_id
+      )
+    ]
+  )
+
+  if (nrow(discovery_pairs) == 0) {
+    stop("No discovery pairs found for WTC11 in Table S3.")
+  }
+
+  discovery_pairs
+}
+
+moi_level <- params$moi_level
+samples_to_merge <- params$sample_list
+prefix <- params$prefix
+
+output_root <- here("results", "2026-05-11_SCEPTRE")
+objects_dir <- file.path(output_root, "objects")
+tables_dir <- file.path(output_root, "tables")
+data_dir <- here("data")
+
+dir.create(objects_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
+
+cat("Creating merged replicate SCEPTRE object for MOI level:", moi_level, "\n")
+cat("Samples to merge:", paste(samples_to_merge, collapse = ", "), "\n")
+```
+
+## Create Discovery pairs
+
+```{r}
+discovery_pairs_path <- file.path(tables_dir, "discovery_pairs_wtc11_all.tsv")
+table_s3_path <- here(
+  "data",
+  "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
+)
+
+table_s3 <- data.table::fread(table_s3_path)
+
+# Build discovery pairs from all WTC11 target-gene pairs (no significance filtering)
+discovery_pairs <- get_discovery_pairs(
+  table_s3 = table_s3
+)
+
+fwrite(discovery_pairs, discovery_pairs_path, sep = "\t")
+cat("\nWrote", nrow(discovery_pairs), "WTC11 discovery pairs to:", discovery_pairs_path, "\n")
+```
+
+## Load Seurat and Filter
+
+```{r load-seurat}
+cat("\nLoading Seurat object...\n")
+seu_path <- here("results", "qc_experiment", "combined_cdna_seurat_filtered.rds")
+seu <- readRDS(seu_path)
+
+cat("Original Seurat object:\n")
+print(seu)
+
+# Get cell names for samples of interest, then subset by cells
+meta_df <- as.data.table(seu[[]], keep.rownames = "cell_id")
+sample_cells <- meta_df[sample %in% samples_to_merge, cell_id]
+
+if (length(sample_cells) == 0) {
+  stop("No cells found for selected samples: ", paste(samples_to_merge, collapse = ", "))
+}
+
+cat("\nFiltering to samples:", paste(samples_to_merge, collapse = ", "), "\n")
+cat("Cells selected:", length(sample_cells), "\n")
+seu_merged <- subset(seu, cells = sample_cells)
+
+cat("Merged Seurat object:\n")
+print(seu_merged)
+cat("Sample column values:", paste(unique(seu_merged$sample), collapse = ", "), "\n")
+```
+
+## Create SCEPTRE Object from Merged Seurat
+
+```{r create-sceptre-object}
+cat("\nCreating SCEPTRE object from merged Seurat...\n")
+
+# Get response genes and gRNA data from merged Seurat
+response_matrix <- Seurat::GetAssayData(seu_merged, assay = "RNA", layer = "counts")
+grna_matrix <- Seurat::GetAssayData(seu_merged, assay = "gRNA", layer = "counts")
+
+# Build gRNA target mapping from Table S3 using hg38 target names
+guide_target_map <- table_s3[
+  !is.na(guide_ids) & nzchar(guide_ids) &
+    !is.na(intended_target_name_hg38) & nzchar(intended_target_name_hg38),
+  .(grna_id = gsub("_", "-", trimws(unlist(strsplit(guide_ids, ",", fixed = TRUE))), fixed = TRUE)),
+  by = .(grna_target = intended_target_name_hg38)
+]
+guide_target_map <- unique(guide_target_map[nzchar(grna_id)])
+
+guide_conflicts <- guide_target_map[, .(n_targets = data.table::uniqueN(grna_target)), by = grna_id]
+guide_conflicts <- guide_conflicts[n_targets > 1]
+if (nrow(guide_conflicts) > 0) {
+  stop(
+    "Some guides map to multiple intended_target_name_hg38 values, e.g.: ",
+    paste(utils::head(guide_conflicts$grna_id, 10), collapse = ", ")
+  )
+}
+
+grna_target_df <- data.table(grna_id = rownames(grna_matrix))
+grna_target_df <- merge(grna_target_df, guide_target_map, by = "grna_id", all.x = TRUE, sort = FALSE)
+grna_target_df$grna_target[is.na(grna_target_df$grna_target)] <- "non-targeting"
+grna_target_df <- unique(grna_target_df[, .(grna_id, grna_target)])
+
+# Keep only guides in discovery targets + non-targeting controls
+discovery_pair_targets <- unique(discovery_pairs$grna_target)
+valid_grna_ids <- grna_target_df[
+  grna_target %in% discovery_pair_targets | grna_target == "non-targeting",
+  grna_id
+]
+grna_matrix <- grna_matrix[valid_grna_ids, , drop = FALSE]
+grna_target_df <- grna_target_df[grna_id %in% rownames(grna_matrix)]
+
+# Keep a copy for downstream analyses
+fwrite(grna_target_df, file.path(tables_dir, "grna_target_data_frame.tsv"), sep = "\t")
+
+# Keep only cells with at least one observed guide
+mask_any_guide <- Matrix::colSums(grna_matrix) > 0
+response_matrix <- response_matrix[, mask_any_guide, drop = FALSE]
+grna_matrix <- grna_matrix[, mask_any_guide, drop = FALSE]
+
+# Extra covariates from metadata - ONLY requested covariates
+meta_merged <- as.data.table(seu_merged[[]], keep.rownames = "cell_id")
+cell_ids <- colnames(response_matrix)
+
+# Select only the columns requested in covariate_columns parameter
+requested_cols <- params$covariate_columns[params$covariate_columns %in% colnames(meta_merged)]
+if (length(requested_cols) == 0) {
+  covariate_df <- data.frame(row.names = cell_ids)
+} else {
+  covariate_df <- as.data.frame(meta_merged[match(cell_ids, cell_id), ..requested_cols], row.names = cell_ids)
+}
+
+# Keep only discovery pairs available in this merged object
+valid_response_ids <- rownames(response_matrix)
+valid_grna_targets <- unique(grna_target_df$grna_target)
+discovery_pairs <- unique(discovery_pairs[
+  grna_target %in% valid_grna_targets & response_id %in% valid_response_ids,
+  .(grna_target, response_id)
+])
+
+cat("Discovery pairs available in merged object:", nrow(discovery_pairs), "\n")
+
+if (nrow(discovery_pairs) == 0) {
+  stop("No discovery pairs remained after filtering for merged object.")
+}
+
+cat("Response matrix:", nrow(response_matrix), "x", ncol(response_matrix), "\n")
+cat("gRNA matrix:", nrow(grna_matrix), "x", ncol(grna_matrix), "\n")
+cat("Covariate data frame:", nrow(covariate_df), "x", ncol(covariate_df), "\n")
+cat("Discovery pairs:", nrow(discovery_pairs), "\n")
+
+# Create formula with requested covariates
+formula_object <- get_dynamic_formula(covariate_df, params$covariate_columns)
+
+# Create SCEPTRE object
+sceptre_object_merged <- sceptre::import_data(
+  response_matrix = response_matrix,
+  grna_matrix = grna_matrix,
+  grna_target_data_frame = as.data.frame(grna_target_df),
+  moi = moi_level,
+  extra_covariates = covariate_df
+)
+
+sceptre_object_merged <- sceptre::set_analysis_parameters(
+  sceptre_object = sceptre_object_merged,
+  discovery_pairs = discovery_pairs,
+  side = "both",
+  formula_object = formula_object
+)
+
+print(sceptre_object_merged)
+```
+
+## Save Object
+
+```{r save-object}
+cat("\nSaving merged SCEPTRE object...\n")
+
+object_name <- paste0(prefix,"_sceptre_object_", moi_level, "_moi_merged")
+object_path <- file.path(objects_dir, paste0(object_name, ".rds"))
+
+saveRDS(sceptre_object_merged, object_path)
+cat("Saved:", object_path, "\n")
+cat("File size:", format(file.size(object_path), units = "auto"), "\n")
+```
+
+## Summary
+
+```{r summary}
+summary_dt <- data.table(
+  object_name = object_name,
+  moi_level = moi_level,
+  samples = paste(samples_to_merge, collapse = " + "),
+  n_cells = ncol(response_matrix),
+  n_response_genes = nrow(response_matrix),
+  n_grnas = nrow(grna_matrix),
+  n_covariates = ncol(covariate_df),
+  n_discovery_pairs = nrow(discovery_pairs)
+)
+
+data.table::fwrite(summary_dt, file.path(tables_dir, paste0(prefix, "_sceptre_object_", moi_level, "_summary.tsv")), sep = "\t")
+
+cat("\n=== MERGED OBJECT SUMMARY ===\n")
+print(summary_dt)
+```

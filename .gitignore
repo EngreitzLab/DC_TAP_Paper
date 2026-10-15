@@ -81,3 +81,4 @@ validations/src/python/__pycache__/
 # Internal working docs (not part of the public submission)
 HANDOFF.md
 .pixi/
+validations/data/

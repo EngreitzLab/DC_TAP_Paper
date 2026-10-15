@@ -1,0 +1,650 @@
+---
+title: "Results statistics"
+output: html_document
+---
+
+
+```{r}
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(here)
+library(ggplot2)
+library(pheatmap)
+```
+
+
+# Aggregating the results from validation experiment
+
+## Loading the gRNA target mapping
+
+```{r}
+# Load gRNA target data frame
+grna_target_df <- fread(here("results/2026-05-11_SCEPTRE/tables/grna_target_data_frame.tsv"), data.table=FALSE)
+num_tested_guides <- nrow(grna_target_df)
+num_tested_elements <- length(unique(grna_target_df$grna_target))
+num_nt_guides <- sum(grna_target_df$grna_target == "non-targeting")
+message("Number of targeting guides: ", num_tested_guides - num_nt_guides)
+message("Number of non-targeting guides: ", num_nt_guides)
+message("Number of tested elements: ", num_tested_elements - 1) # Because it includes non-targeting as element
+```
+
+## Loading paper results
+
+```{r}
+table_s3_path <- here("data/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
+table_s3 <- fread(table_s3_path, data.table=FALSE)
+# Filter to WTC11 only (matching analysis)
+table_s3_wtc11 <- table_s3[table_s3$cell_type == "WTC11", ]
+# Filter to match only the elements in gRNA mapping
+tested_elements <- unique(grna_target_df$grna_target)
+table_s3_wtc11 <- table_s3_wtc11[table_s3_wtc11$intended_target_name_hg38 %in% tested_elements, ]
+number_of_pairs_tested <- dim(table_s3_wtc11)[1]
+message("Number of pairs in validation experiment: ", number_of_pairs_tested)
+```
+
+# Significant pairs
+
+```{r}
+cat("Significant pairs:\n")
+sig_pairs <- table_s3_wtc11[table_s3_wtc11$significant == TRUE, ]
+cat("  ", nrow(sig_pairs), " (", round(100*nrow(sig_pairs)/nrow(table_s3_wtc11), 2), "% )\n\n")
+```
+
+
+# Breakdown by element category if available
+
+```{r}
+# Replace NA with "Other"
+table_s3_wtc11$element_category[is.na(table_s3_wtc11$element_category)] <- "Other"
+sig_pairs$element_category[is.na(sig_pairs$element_category)] <- "Other"
+
+cat("Pairs by element category (All):\n")
+print(table(table_s3_wtc11$element_category))
+
+cat("\nPairs by element category (Significant):\n")
+print(table(sig_pairs$element_category))
+```
+
+# Plots
+
+```{r}
+# Define category order and color map
+category_order <- c("High H3K27ac", "H3K27ac", "No H3K27ac", "CTCF element", "H3K27me3 element", "Other")
+color_values <- c("#c5373d", "#d9694a", "#c5cad7", "#49bcbc", "#429130", "grey80")
+color_map <- setNames(color_values, category_order)
+```
+
+## Pairs by element category
+
+```{r}
+# Count pairs by category
+category_counts <- data.frame(table(table_s3_wtc11$element_category))
+names(category_counts) <- c("element_category", "all_pairs")
+
+sig_category_counts <- data.frame(table(sig_pairs$element_category))
+names(sig_category_counts) <- c("element_category", "sig_pairs")
+
+category_counts <- merge(category_counts, sig_category_counts, by="element_category", all.x=TRUE)
+category_counts$sig_pairs[is.na(category_counts$sig_pairs)] <- 0
+
+# Convert to ordered factor
+category_counts$element_category <- factor(category_counts$element_category, levels=category_order)
+category_counts <- category_counts[order(category_counts$element_category), ]
+
+# Reshape for plotting
+category_long <- data.frame(
+  category = rep(category_counts$element_category, 2),
+  pairs = c(category_counts$all_pairs, category_counts$sig_pairs),
+  type = rep(c("All", "Significant"), each=nrow(category_counts))
+)
+
+# Create fill colors: white for "All", color_map for "Significant"
+category_long$fill_color <- ifelse(category_long$type == "Significant", 
+                                   color_map[as.character(category_long$category)],
+                                   "white")
+
+ggplot(category_long, aes(x=category, y=pairs, fill=fill_color)) +
+  geom_col(position="dodge", color="black") +
+  scale_fill_identity() +
+  geom_text(aes(label=pairs), position=position_dodge(width=0.9), vjust=-0.5) +
+  theme_minimal() +
+  labs(title="Pairs by Element Category", x="Element Category", y="Number of Pairs") +
+  theme(axis.text.x=element_text(angle=45, hjust=1), legend.position="none")
+```
+
+## Effect size by element category
+
+```{r}
+table_s3_wtc11_plot <- data.frame(table_s3_wtc11[, c("element_category", "pct_change_effect_size")])
+table_s3_wtc11_plot$element_category <- factor(table_s3_wtc11_plot$element_category, levels=category_order)
+table_s3_wtc11_plot$significance <- "Non-significant"
+table_s3_wtc11_plot$significance[table_s3_wtc11$significant == TRUE] <- "Significant"
+
+# Create fill colors: white for non-significant, color_map for significant
+table_s3_wtc11_plot$fill_color <- ifelse(table_s3_wtc11_plot$significance == "Significant",
+                                          color_map[as.character(table_s3_wtc11_plot$element_category)],
+                                          "white")
+
+# Count points per group
+point_counts <- table_s3_wtc11_plot %>%
+  group_by(element_category, significance) %>%
+  summarise(n=n(), max_y=max(pct_change_effect_size), .groups='drop')
+# Add fill_color to point_counts for proper dodging
+point_counts$fill_color <- ifelse(point_counts$significance == "Significant",
+                                   color_map[as.character(point_counts$element_category)],
+                                   "white")
+
+ggplot(table_s3_wtc11_plot, aes(x=element_category, y=pct_change_effect_size, fill=fill_color)) +
+  geom_boxplot(color="black") +
+  scale_fill_identity() +
+  geom_text(data=point_counts, aes(x=element_category, y=max_y, label=n, fill=fill_color), vjust=-0.5, color="black", position=position_dodge(width=0.75)) +
+  theme_minimal() +
+  labs(title="Effect Size (% Change) by Element Category", x="Element Category", y="% Change") +
+  theme(axis.text.x=element_text(angle=45, hjust=1), legend.position="none") +
+  geom_hline(yintercept=0, linetype="dotted", alpha=0.5)
+```
+
+## Distance to TSS by element category
+
+```{r}
+table_s3_wtc11_tss <- data.frame(table_s3_wtc11[, c("element_category", "distance_to_gencode_gene_TSS")])
+table_s3_wtc11_tss$element_category <- factor(table_s3_wtc11_tss$element_category, levels=category_order)
+table_s3_wtc11_tss$distance_kb <- table_s3_wtc11_tss$distance_to_gencode_gene_TSS / 1000
+table_s3_wtc11_tss$significance <- "Non-significant"
+table_s3_wtc11_tss$significance[table_s3_wtc11$significant == TRUE] <- "Significant"
+
+# Create fill colors: white for non-significant, color_map for significant
+table_s3_wtc11_tss$fill_color <- ifelse(table_s3_wtc11_tss$significance == "Significant",
+                                         color_map[as.character(table_s3_wtc11_tss$element_category)],
+                                         "white")
+
+# Count points per group
+point_counts_tss <- table_s3_wtc11_tss %>%
+  group_by(element_category, significance) %>%
+  summarise(n=n(), max_y=max(distance_kb), .groups='drop')
+# Add fill_color to point_counts_tss for proper dodging
+point_counts_tss$fill_color <- ifelse(point_counts_tss$significance == "Significant",
+                                       color_map[as.character(point_counts_tss$element_category)],
+                                       "white")
+
+ggplot(table_s3_wtc11_tss, aes(x=element_category, y=distance_kb, fill=fill_color)) +
+  geom_boxplot(color="black") +
+  scale_fill_identity() +
+  geom_text(data=point_counts_tss, aes(x=element_category, y=max_y, label=n, fill=fill_color), vjust=-0.5, color="black", position=position_dodge(width=0.75)) +
+  theme_minimal() +
+  labs(title="Distance to GENCODE Gene TSS by Element Category", x="Element Category", y="Distance (kb)") +
+  theme(axis.text.x=element_text(angle=45, hjust=1), legend.position="none") +
+  scale_y_log10()
+```
+
+# Loading SCEPTRE union results
+
+```{r}
+# Load all union discovery results
+union_dirs <- c("MOI1_1_union", "MOI1_5_union", "MOI11_3_union", "MOI13_union", 
+                "low_moi_merged_union", "high_moi_merged_union")
+
+sceptre_results_list <- list()
+
+for (dir_name in union_dirs) {
+  results_path <- here("results/2026-05-11_SCEPTRE/runs", dir_name, "sceptre_discovery_results.tsv")
+  if (file.exists(results_path)) {
+    sceptre_results <- fread(results_path, data.table=FALSE)
+    sceptre_results$source <- dir_name
+    sceptre_results_list[[dir_name]] <- sceptre_results
+    message("Loaded ", dir_name, ": ", nrow(sceptre_results), " results")
+  } else {
+    message("WARNING: ", results_path, " not found")
+  }
+}
+
+# Combine all results
+sceptre_results_all <- do.call(rbind, sceptre_results_list)
+rownames(sceptre_results_all) <- NULL
+sceptre_results_all$pct_change_effect_size <- 100 * (sceptre_results_all$fold_change - 1)
+sceptre_results_all$se_change_effect_size <- 100 * sceptre_results_all$se_fold_change
+sceptre_results_all$fdr <- p.adjust(sceptre_results_all$p_value, method="fdr")
+
+# Add gene symbols from GENCODE v32 using ENSG response IDs
+gencode_v32_path <- here("data/gencode.v32.primary_assembly.annotation.gtf.gz")
+gencode_genes <- fread(
+  cmd = paste("gzip -dc", shQuote(gencode_v32_path)),
+  sep = "\t",
+  header = FALSE,
+  quote = "",
+  data.table = FALSE,
+  fill = TRUE,
+  comment.char = "#"
+)
+colnames(gencode_genes) <- c(
+  "seqname", "source", "feature", "start", "end", "score",
+  "strand", "frame", "attribute"
+)
+gencode_genes <- gencode_genes[gencode_genes$feature == "gene", "attribute", drop = FALSE]
+gencode_genes$gene_id <- sub('.*gene_id "([^"]+)".*', '\\1', gencode_genes$attribute)
+gencode_genes$gene_symbol <- sub('.*gene_name "([^"]+)".*', '\\1', gencode_genes$attribute)
+gencode_genes$gene_id_stripped <- sub("\\..*$", "", gencode_genes$gene_id)
+gencode_genes <- unique(gencode_genes[, c("gene_id_stripped", "gene_symbol")])
+
+sceptre_results_all$response_id_stripped <- sub("\\..*$", "", sceptre_results_all$response_id)
+sceptre_results_all <- merge(
+  sceptre_results_all,
+  gencode_genes,
+  by.x = "response_id_stripped",
+  by.y = "gene_id_stripped",
+  all.x = TRUE,
+  sort = FALSE
+)
+sceptre_results_all$element_gene_pair_identifier_hg38 <- paste(sceptre_results_all$gene_symbol, sceptre_results_all$grna_target, sep="|")
+
+message("Total SCEPTRE results: ", nrow(sceptre_results_all))
+message("Unique pairs tested: ", length(unique(paste(sceptre_results_all$response_id, sceptre_results_all$grna_target))))
+```
+
+# Results comparison
+
+```{r}
+# How many significant pairs are confirmed by the validation experiment?
+pairs_mask <- sceptre_results_all$element_gene_pair_identifier_hg38 %in% sig_pairs$element_gene_pair_identifier_hg38
+plot_df <- sceptre_results_all %>%
+  filter(pairs_mask) %>%
+  select(element_gene_pair_identifier_hg38, pct_change_effect_size, significant, source)
+
+plot_df <- merge(
+  plot_df,
+  sig_pairs[, c("element_gene_pair_identifier_hg38", "element_category", "pct_change_effect_size")],
+  by.x = c("element_gene_pair_identifier_hg38"),
+  by.y = c("element_gene_pair_identifier_hg38"),
+  all.x = TRUE,
+  sort = FALSE
+)
+
+
+plot_df_counts <- plot_df %>%
+  mutate(
+    significant = case_when(
+      is.na(significant) ~ "Not tested",
+      significant ~ "Significant",
+      TRUE ~ "Not significant"
+    ),
+    significant = factor(
+      significant,
+      levels = c("Not significant", "Significant", "Not tested")
+    )
+  ) %>%
+  count(source, element_category, significant, name = "n")
+
+
+ggplot(plot_df_counts,
+       aes(x = element_category, y = n, fill = significant)) +
+  geom_col(position = "dodge", color = "black") +
+  facet_wrap(~ source, ncol=2) +
+  theme_minimal() +
+  labs(
+    title = "DC-TAP paper results validation",
+    x = "Element Category",
+    y = "Number of pairs",
+    fill = NULL
+  )
+```
+
+
+```{r height=12}
+source_order <- c(
+  "MOI1_1_union",
+  "MOI1_5_union",
+  "low_moi_merged_union",
+  "MOI11_3_union",
+  "MOI13_union",
+  "high_moi_merged_union"
+)
+
+category_order <- c(
+  "High H3K27ac",
+  "H3K27ac",
+  "No H3K27ac",
+  "CTCF element",
+  "H3K27me3 element",
+  "Other"
+)
+
+color_values <- c("#c5373d", "#d9694a", "#c5cad7", "#49bcbc", "#429130", "grey80")
+color_map <- setNames(color_values, category_order)
+
+tile_df <- plot_df %>%
+  mutate(
+    significant = coalesce(significant, FALSE),
+    source = factor(source, levels = source_order),
+    element_category = factor(element_category, levels = category_order)
+  ) %>%
+  group_by(
+    element_gene_pair_identifier_hg38,
+    element_category,
+    source
+  ) %>%
+  summarise(
+    significant = any(significant),
+    .groups = "drop"
+  ) %>%
+  complete(
+    element_gene_pair_identifier_hg38,
+    source = factor(source_order, levels = source_order),
+    fill = list(significant = FALSE)
+  ) %>%
+  left_join(
+    plot_df %>%
+      distinct(element_gene_pair_identifier_hg38, element_category),
+    by = "element_gene_pair_identifier_hg38",
+    suffix = c("", ".orig")
+  ) %>%
+  mutate(
+    element_category = coalesce(element_category, element_category.orig),
+    element_category = factor(element_category, levels = category_order)
+  ) %>%
+  select(-element_category.orig)
+
+
+pair_order <- tile_df %>%
+  distinct(element_gene_pair_identifier_hg38, element_category) %>%
+  arrange(element_category, element_gene_pair_identifier_hg38) %>%
+  pull(element_gene_pair_identifier_hg38)
+
+tile_df <- tile_df %>%
+  mutate(
+    element_gene_pair_identifier_hg38 = factor(
+      element_gene_pair_identifier_hg38,
+      levels = rev(pair_order)
+    )
+  )
+ggplot(tile_df,
+       aes(x = source,
+           y = element_gene_pair_identifier_hg38)) +
+  geom_tile(aes(fill = element_category),
+            color = "white",
+            linewidth = 0.3) +
+  geom_point(
+    data = tile_df %>% filter(significant),
+    aes(x = source, y = element_gene_pair_identifier_hg38),
+    shape = 21,
+    fill = "black",
+    color = "black",
+    size = 2
+  ) +
+  scale_fill_manual(values = color_map, drop = FALSE) +
+  theme_minimal() +
+  labs(
+    title = "DC-TAP paper results validation",
+    x = "Source",
+    y = "Element-gene pair",
+    fill = "Element category"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.title = element_blank()
+  )
+
+```
+
+# Pheatmap of pair significance across union runs
+
+```{r}
+source_order_heat <- c(
+  "MOI1_1_union",
+  "MOI1_5_union",
+  "low_moi_merged_union",
+  "MOI11_3_union",
+  "MOI13_union",
+  "high_moi_merged_union"
+)
+
+power_cols <- c(
+  "power_at_effect_size_2_wo_pos_controls_20fdr",
+  "power_at_effect_size_3_wo_pos_controls_20fdr",
+  "power_at_effect_size_5_wo_pos_controls_20fdr",
+  "power_at_effect_size_10_wo_pos_controls_20fdr",
+  "power_at_effect_size_15_wo_pos_controls_20fdr",
+  "power_at_effect_size_20_wo_pos_controls_20fdr",
+  "power_at_effect_size_25_wo_pos_controls_20fdr",
+  "power_at_effect_size_50_wo_pos_controls_20fdr"
+)
+
+power_col_labels <- c(
+  "power_es_2",
+  "power_es_3",
+  "power_es_5",
+  "power_es_10",
+  "power_es_15",
+  "power_es_20",
+  "power_es_25",
+  "power_es_50"
+)
+
+power_ann <- table_s3_wtc11 %>%
+  select(element_gene_pair_identifier_hg38, all_of(power_cols)) %>%
+  distinct() %>%
+  mutate(
+    across(
+      all_of(power_cols),
+      ~ case_when(
+        is.na(.) ~ "NA",
+        . < 0.5 ~ "<0.5",
+        . < 0.8 ~ "0.5-0.8",
+        TRUE ~ ">=0.8"
+      )
+    )
+  ) %>%
+  mutate(across(all_of(power_cols), ~ factor(., levels = c("<0.5", "0.5-0.8", ">=0.8", "NA"))))
+
+heat_df <- plot_df %>%
+  mutate(
+    significant = ifelse(is.na(significant), 0L, as.integer(significant)),
+    source = factor(source, levels = source_order_heat)
+  ) %>%
+  select(element_gene_pair_identifier_hg38, source, significant) %>%
+  distinct() %>%
+  complete(
+    element_gene_pair_identifier_hg38,
+    source = factor(source_order_heat, levels = source_order_heat),
+    fill = list(significant = 0L)
+  ) %>%
+  pivot_wider(names_from = source, values_from = significant)
+
+heat_mat <- as.matrix(heat_df[, -1])
+rownames(heat_mat) <- heat_df$element_gene_pair_identifier_hg38
+
+row_anno <- plot_df %>%
+  distinct(element_gene_pair_identifier_hg38, element_category, pct_change_effect_size.y) %>%
+  left_join(
+    power_ann,
+    by = c("element_gene_pair_identifier_hg38" = "element_gene_pair_identifier_hg38")
+  ) %>%
+  mutate(
+    element_category = ifelse(is.na(element_category), "Other", element_category),
+    element_category = factor(element_category, levels = category_order),
+    pct_change_effect_size = as.numeric(pct_change_effect_size.y)
+  )
+
+row_order <- row_anno %>%
+  arrange(element_category, desc(pct_change_effect_size), element_gene_pair_identifier_hg38) %>%
+  pull(element_gene_pair_identifier_hg38)
+
+row_anno_df <- as.data.frame(row_anno)
+rownames(row_anno_df) <- row_anno_df$element_gene_pair_identifier_hg38
+row_anno_df <- row_anno_df[row_order, c("element_category", "pct_change_effect_size", power_cols)]
+colnames(row_anno_df) <- c("element_category", "pct_change_effect_size", power_col_labels)
+
+heat_mat <- heat_mat[row_order, source_order_heat, drop = FALSE]
+
+col_anno <- data.frame(
+  MOI = c("Low MOI", "Low MOI", "Low MOI", "High MOI", "High MOI", "High MOI"),
+  row.names = source_order_heat
+)
+
+power_bin_colors <- c(
+  "<0.5" = "#d73027",
+  "0.5-0.8" = "#fdae61",
+  ">=0.8" = "#1a9850",
+  "NA" = "grey90"
+)
+
+annotation_colors <- list(
+  element_category = color_map,
+  MOI = c("Low MOI" = "#4E79A7", "High MOI" = "#F28E2B"),
+  pct_change_effect_size = colorRampPalette(c("#2166ac", "white", "#b2182b"))(100)
+)
+for (pc in power_col_labels) {
+  annotation_colors[[pc]] <- power_bin_colors
+}
+
+pheatmap(
+  mat = heat_mat,
+  color = c("white", "black"),
+  breaks = c(-0.01, 0.5, 1.01),
+  legend_breaks = c(0, 1),
+  legend_labels = c("Not significant", "Significant"),
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  show_rownames = FALSE,
+  annotation_row = row_anno_df,
+  annotation_col = col_anno,
+  annotation_colors = annotation_colors,
+  annotation_legend = TRUE,
+  main = "Validation pairs across union analyses (significant = black)"
+)
+```
+
+# Summary statistics for validation
+
+## Percentage of pairs significant in each sample (out of 34)
+
+```{r}
+# Set display labels for samples
+source_order <- c(
+  "MOI1_1_union",
+  "MOI1_5_union",
+  "low_moi_merged_union",
+  "MOI11_3_union",
+  "MOI13_union",
+  "high_moi_merged_union"
+)
+source_labels <- c(
+  "low_1",
+  "low_2",
+  "low_merged",
+  "high_1",
+  "high_2",
+  "high_merged"
+)
+
+num_pairs <- nrow(heat_mat)
+percent_sig_per_sample <- colSums(heat_mat) / num_pairs * 100
+summary_sig_per_sample <- data.frame(
+  Sample = factor(colnames(heat_mat), levels = source_order, labels = source_labels),
+  Num_Significant = colSums(heat_mat),
+  Percent_Significant = round(percent_sig_per_sample, 1)
+)
+summary_sig_per_sample <- summary_sig_per_sample[order(summary_sig_per_sample$Sample), ]
+knitr::kable(summary_sig_per_sample, caption = "Significant pairs per sample (out of 34)")
+```
+
+## Percentage of pairs per element_category validated in each sample
+
+```{r}
+# Set desired orders and display labels
+source_order <- c(
+  "MOI1_1_union",
+  "MOI1_5_union",
+  "low_moi_merged_union",
+  "MOI11_3_union",
+  "MOI13_union",
+  "high_moi_merged_union"
+)
+source_labels <- c(
+  "low_1",
+  "low_2",
+  "low_merged",
+  "high_1",
+  "high_2",
+  "high_merged"
+)
+category_order <- c(
+  "High H3K27ac",
+  "H3K27ac",
+  "No H3K27ac",
+  "CTCF element",
+  "H3K27me3 element",
+  "Other"
+)
+
+row_anno_df$element_category <- as.character(row_anno_df$element_category)
+category_sample_stats <- lapply(unique(row_anno_df$element_category), function(cat) {
+  idx <- which(row_anno_df$element_category == cat)
+  n_cat <- length(idx)
+  if (n_cat == 0) return(NULL)
+  sig_mat <- heat_mat[idx, , drop=FALSE]
+  data.frame(
+    element_category = cat,
+    Sample = colnames(heat_mat),
+    Num_Significant = colSums(sig_mat),
+    Percent_Significant = round(colSums(sig_mat) / n_cat * 100, 1),
+    Num_Pairs = n_cat
+  )
+})
+category_sample_stats_df <- do.call(rbind, category_sample_stats)
+
+# Apply factor levels for correct ordering
+category_sample_stats_df$element_category <- factor(category_sample_stats_df$element_category, levels = category_order)
+category_sample_stats_df$Sample <- factor(category_sample_stats_df$Sample, levels = source_order, labels = source_labels)
+category_sample_stats_df <- category_sample_stats_df[order(category_sample_stats_df$element_category, category_sample_stats_df$Sample), ]
+
+knitr::kable(category_sample_stats_df, caption = "Significant pairs per element_category per sample (ordered by category and source)")
+```
+
+### Plot: Validation rates by element category and sample
+
+```{r}
+# Prepare plotting data
+plot_data <- category_sample_stats_df
+plot_data$MOI <- ifelse(grepl("^low", plot_data$Sample), "Low", "High")
+plot_data$Merged <- ifelse(grepl("merged", plot_data$Sample), "Merged", "Not merged")
+plot_data$MOI <- factor(plot_data$MOI, levels = c("Low", "High"))
+plot_data$Merged <- factor(plot_data$Merged, levels = c("Not merged", "Merged"))
+
+# Plot
+ggplot(plot_data, aes(x = element_category, y = Percent_Significant, color = MOI, shape = Merged)) +
+  geom_point(size = 3, position = position_dodge(width = 0.5)) +
+  scale_color_manual(values = c("Low" = "#4E79A7", "High" = "#F28E2B")) +
+  scale_shape_manual(values = c("Not merged" = 16, "Merged" = 17)) +
+  labs(
+    title = "% of pairs significant per element_category and sample",
+    x = "Element Category",
+    y = "% Significant",
+    color = "MOI",
+    shape = "Sample Type"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## Percentage per category validated at least once
+
+```{r}
+category_once_stats <- lapply(unique(row_anno_df$element_category), function(cat) {
+  idx <- which(row_anno_df$element_category == cat)
+  n_cat <- length(idx)
+  if (n_cat == 0) return(NULL)
+  sig_any <- rowSums(heat_mat[idx, , drop=FALSE]) > 0
+  data.frame(
+    element_category = cat,
+    Num_Validated_At_Least_Once = sum(sig_any),
+    Percent_Validated_At_Least_Once = round(sum(sig_any) / n_cat * 100, 1),
+    Num_Pairs = n_cat
+  )
+})
+category_once_stats_df <- do.call(rbind, category_once_stats)
+knitr::kable(category_once_stats_df, caption = "Pairs per element_category validated at least once across all samples")
+```
+
+
+

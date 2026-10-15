@@ -1,0 +1,226 @@
+---
+title: "Guide Pool QC"
+output: pdf_document
+---
+
+```{r setup, message=FALSE, warning=FALSE}
+library(data.table)
+library(ggplot2)
+library(stringr)
+library(here)
+library(knitr)
+
+pool_files <- c(
+  pool1 = here("results", "guide_pool_qc", "pool1_bowtie_out.txt"),
+  pool2 = here("results", "guide_pool_qc", "pool2_bowtie_out.txt")
+)
+
+pretty_pool_name <- function(pool_name) {
+  paste("Pool", sub("^pool", "", pool_name))
+}
+
+quantile_text <- function(guide_counts) {
+  q_values <- quantile(guide_counts$N, probs = c(0.1, 0.9), names = FALSE)
+  q_ratio <- if (q_values[1] == 0) Inf else q_values[2] / q_values[1]
+  sprintf(
+    "Per-pool quantiles: 10th = %.1f; 90th = %.1f; ratio (90/10) = %.2f",
+    q_values[1],
+    q_values[2],
+    q_ratio
+  )
+}
+
+analyze_pool <- function(pool_name, bowtie_file) {
+  if (!file.exists(bowtie_file)) {
+    stop(sprintf("Missing Bowtie output for %s: %s", pool_name, bowtie_file))
+  }
+
+  # Bowtie1 default output columns:
+  # 1 read_id
+  # 2 strand
+  # 3 ref_id
+  # 4 offset
+  # 5 seq
+  # 6 qual
+  # 7 other instances
+  # 8 mismatch desc (optional)
+  dt <- fread(
+    bowtie_file,
+    sep = "\t",
+    header = FALSE,
+    fill = TRUE,
+    col.names = c("read_id", "strand", "ref_id", "offset", "seq", "qual", "n_other", "mismatch_desc")
+  )
+
+  dt[, mismatch_desc := fifelse(is.na(mismatch_desc) | mismatch_desc == "", NA_character_, mismatch_desc)]
+
+  guide_counts <- dt[, .N, by = ref_id][order(-N)]
+  guide_counts[, rank := .I]
+  guide_counts[, frac := N / sum(N)]
+
+  dt[, n_mismatch := fifelse(is.na(mismatch_desc), 0L, str_count(mismatch_desc, ",") + 1L)]
+
+  mismatch_pos <- dt[!is.na(mismatch_desc), .(token = unlist(strsplit(mismatch_desc, ","))), by = read_id]
+  mismatch_pos[, pos := as.integer(sub(":.*", "", token))]
+
+  q_values <- quantile(guide_counts$N, probs = c(0.1, 0.9), names = FALSE)
+  q_ratio <- if (q_values[1] == 0) Inf else q_values[2] / q_values[1]
+  q_text <- quantile_text(guide_counts)
+  least_covered <- guide_counts[which.min(N)]
+  bottom_guides <- guide_counts[rank > 0.9 * max(rank)]
+
+  plots <- list(
+    reads_per_guide = ggplot(guide_counts, aes(x = N)) +
+      geom_histogram(bins = 50) +
+      labs(
+        title = sprintf("%s: reads per guide", pretty_pool_name(pool_name)),
+        subtitle = q_text,
+        x = "Read count per guide",
+        y = "Number of guides"
+      ) +
+      theme_bw(),
+    rank_abundance = ggplot(guide_counts, aes(x = rank, y = N)) +
+      geom_line() +
+      scale_y_log10() +
+      labs(
+        title = sprintf("%s: guide rank-abundance", pretty_pool_name(pool_name)),
+        subtitle = q_text,
+        x = "Guide rank",
+        y = "Read count (log10)"
+      ) +
+      theme_bw(),
+    mismatch_burden = ggplot(dt, aes(x = factor(n_mismatch))) +
+      geom_bar() +
+      labs(
+        title = sprintf("%s: mismatch count per aligned read", pretty_pool_name(pool_name)),
+        subtitle = q_text,
+        x = "Number of mismatches",
+        y = "Number of reads"
+      ) +
+      theme_bw(),
+    mismatch_position = ggplot(mismatch_pos, aes(x = pos)) +
+      geom_bar() +
+      labs(
+        title = sprintf("%s: mismatch positions", pretty_pool_name(pool_name)),
+        subtitle = q_text,
+        x = "Position in guide",
+        y = "Mismatch count"
+      ) +
+      theme_bw(),
+    bottom_decile = ggplot(bottom_guides, aes(x = N)) +
+      geom_histogram(bins = 20) +
+      labs(
+        title = sprintf("%s: reads per guide (bottom 10%%)", pretty_pool_name(pool_name)),
+        subtitle = q_text,
+        x = "Read count per guide",
+        y = "Number of guides"
+      ) +
+      theme_bw()
+  )
+
+  list(
+    pool_name = pool_name,
+    bowtie_file = bowtie_file,
+    dt = dt,
+    guide_counts = guide_counts,
+    quantiles = q_values,
+    quantile_ratio = q_ratio,
+    quantile_summary = q_text,
+    least_covered = least_covered,
+    plots = plots
+  )
+}
+
+pool_results <- lapply(names(pool_files), function(pool_name) {
+  analyze_pool(pool_name, pool_files[[pool_name]])
+})
+names(pool_results) <- names(pool_files)
+
+ratio_summary <- rbindlist(lapply(pool_results, function(pool_result) {
+  data.table(
+    pool = pretty_pool_name(pool_result$pool_name),
+    q10 = round(pool_result$quantiles[1], 1),
+    q90 = round(pool_result$quantiles[2], 1),
+    ratio_90_10 = round(pool_result$quantile_ratio, 2)
+  )
+}))
+
+guide_count_tables <- lapply(names(pool_results), function(pool_name) {
+  pool_counts <- copy(pool_results[[pool_name]]$guide_counts[, .(ref_id, N)])
+  setnames(pool_counts, c("ref_id", "N"), c("guide_id", paste0("counts_", pool_name)))
+  pool_counts
+})
+
+guide_count_summary <- Reduce(function(x, y) merge(x, y, by = "guide_id", all = TRUE), guide_count_tables)
+guide_count_summary[is.na(counts_pool1), counts_pool1 := 0L]
+guide_count_summary[is.na(counts_pool2), counts_pool2 := 0L]
+setorder(guide_count_summary, guide_id)
+
+guide_count_tsv <- here("results", "guide_pool_qc", "guide_counts.tsv")
+fwrite(guide_count_summary, guide_count_tsv, sep = "\t")
+```
+
+## Key QC metric: 90th / 10th read-count ratio
+
+```{r ratio-summary}
+kable(
+  ratio_summary,
+  col.names = c("Pool", "10th percentile", "90th percentile", "90% / 10% ratio"),
+  caption = "Per-pool guide count spread summary"
+)
+```
+
+## Guide count table
+
+The per-guide count table is written to `results/guide_pool_qc/guide_counts.tsv`.
+
+```{r guide-count-summary}
+kable(
+  head(guide_count_summary, 10),
+  col.names = c("guide_id", "counts_pool1", "counts_pool2"),
+  caption = "Preview of per-guide counts written to guide_counts.tsv"
+)
+```
+
+```{r pool-report, results='asis', fig.width=7, fig.height=4}
+for (pool_name in names(pool_results)) {
+  pool_result <- pool_results[[pool_name]]
+
+  cat("\n# ", pretty_pool_name(pool_name), "\n\n", sep = "")
+  cat("- Input file: `", pool_result$bowtie_file, "`\n", sep = "")
+  cat("- Aligned reads: ", nrow(pool_result$dt), "\n", sep = "")
+  cat("- Unique guides hit: ", uniqueN(pool_result$dt$ref_id), "\n", sep = "")
+  cat("- Median reads/guide: ", median(pool_result$guide_counts$N), "\n", sep = "")
+  cat("- Mean reads/guide: ", mean(pool_result$guide_counts$N), "\n", sep = "")
+  cat("- Fraction perfect matches: ", mean(pool_result$dt$n_mismatch == 0), "\n", sep = "")
+  cat("- Fraction 1-mismatch: ", mean(pool_result$dt$n_mismatch == 1), "\n", sep = "")
+  cat(
+    "- Least covered guide: `",
+    pool_result$least_covered$ref_id,
+    "` with ",
+    pool_result$least_covered$N,
+    " reads\n",
+    sep = ""
+  )
+  cat(
+    "- Quantiles (10% / 90%): ",
+    sprintf("%.1f / %.1f", pool_result$quantiles[1], pool_result$quantiles[2]),
+    "\n",
+    sep = ""
+  )
+  cat(
+    "- **Key metric: ratio (90% / 10%) = ",
+    sprintf("%.2f", pool_result$quantile_ratio),
+    "**\n\n",
+    sep = ""
+  )
+
+  print(pool_result$plots$reads_per_guide)
+  print(pool_result$plots$rank_abundance)
+  print(pool_result$plots$mismatch_burden)
+  print(pool_result$plots$mismatch_position)
+  print(pool_result$plots$bottom_decile)
+}
+```
+
+

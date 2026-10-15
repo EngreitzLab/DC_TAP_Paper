@@ -1,0 +1,233 @@
+---
+title: "2026-05-11 SCEPTRE - Run Pipeline"
+output: html_document
+params:
+  sceptre_object_path: NULL
+  prefix: "merged"
+  integration_strategy: "union"
+  n_processors: 2
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(data.table)
+  library(here)
+})
+
+if (!requireNamespace("sceptre", quietly = TRUE)) {
+  stop("Package 'sceptre' is required. Install with renv::install('katsevich-lab/sceptre').")
+}
+
+prefix <- params$prefix
+integration_strategy <- params$integration_strategy
+n_processors <- as.integer(params$n_processors)
+
+cat("Parameters for this run:\n")
+cat("  sceptre_object_path:", params$sceptre_object_path, "\n")
+cat("  prefix:", prefix, "\n")
+cat("  integration_strategy:", integration_strategy, "\n")
+cat("  n_processors:", n_processors, "\n")
+```
+
+```{r load-object}
+output_root <- here("results", "2026-05-11_SCEPTRE")
+tables_dir <- file.path(output_root, "tables")
+runs_dir <- file.path(output_root, "runs")
+merged_run_dir <- file.path(runs_dir, paste0(prefix, "_", integration_strategy))
+
+dir.create(merged_run_dir, recursive = TRUE, showWarnings = FALSE)
+dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
+
+if (is.null(params$sceptre_object_path) || !nzchar(params$sceptre_object_path)) {
+  stop("sceptre_object_path param must be provided.")
+}
+if (!file.exists(here(params$sceptre_object_path))) {
+  stop("SCEPTRE object not found: ", here(params$sceptre_object_path))
+}
+
+cat("\nLoading SCEPTRE object from:", here(params$sceptre_object_path), "\n")
+sceptre_object_merged <- readRDS(here(params$sceptre_object_path))
+cat("Loaded successfully\n")
+print(sceptre_object_merged)
+```
+
+```{r set-analysis-params}
+cat("\nSetting analysis parameters with integration strategy:", integration_strategy, "\n")
+
+sceptre_object_merged <- sceptre::set_analysis_parameters(
+  sceptre_object = sceptre_object_merged,
+  discovery_pairs = sceptre_object_merged@discovery_pairs[, c("grna_target", "response_id")],
+  side = "both",
+  formula_object = sceptre_object_merged@formula_object,
+  grna_integration_strategy = integration_strategy
+)
+
+print(sceptre_object_merged)
+```
+
+## Assign gRNAs
+
+```{r assign-grnas}
+cat("Assigning gRNAs using SCEPTRE defaults\n")
+
+sceptre_object_merged <- sceptre::assign_grnas(
+  sceptre_object = sceptre_object_merged,
+  parallel = TRUE,
+  n_processors = n_processors
+)
+
+print(sceptre_object_merged)
+sceptre::plot_grna_count_distributions(sceptre_object_merged)
+```
+
+## Quality Control
+
+```{r run-qc}
+cat("Running QC with n_nonzero_trt_thresh=15 and n_nonzero_cntrl_thresh=15\n")
+
+sceptre_object_merged <- sceptre::run_qc(
+  sceptre_object = sceptre_object_merged,
+  n_nonzero_trt_thresh = 15L,
+  n_nonzero_cntrl_thresh = 15L
+)
+
+print(sceptre_object_merged)
+```
+
+## Calibration Check
+
+```{r run-calibration}
+cat("Running calibration check with", n_processors, "processors\n")
+
+sceptre_object_merged <- sceptre::run_calibration_check(
+  sceptre_object = sceptre_object_merged,
+  parallel = TRUE,
+  n_processors = n_processors
+)
+
+print(sceptre_object_merged)
+calibration_result <- sceptre::get_result(
+  sceptre_object = sceptre_object_merged,
+  analysis = "run_calibration_check"
+)
+cat("Calibration results rows:", nrow(calibration_result), "\n")
+print(head(calibration_result))
+```
+
+## Power Check
+
+```{r run-power}
+# Check if positive control pairs are available
+has_pos_ctrl <- !is.null(sceptre_object_merged@positive_control_pairs) && nrow(sceptre_object_merged@positive_control_pairs) > 0
+
+if (has_pos_ctrl) {
+  cat("Running power check with", n_processors, "processors\n")
+  
+  sceptre_object_merged <- sceptre::run_power_check(
+    sceptre_object = sceptre_object_merged,
+    parallel = TRUE,
+    n_processors = n_processors
+  )
+  
+  print(sceptre_object_merged)
+  power_result <- sceptre::get_result(
+    sceptre_object = sceptre_object_merged,
+    analysis = "run_power_check"
+  )
+  cat("Power results rows:", nrow(power_result), "\n")
+  print(head(power_result))
+} else {
+  cat("Note: Positive control pairs not supplied. Skipping power check.\n")
+  cat("To enable power check, supply positive_control_pairs in set_analysis_parameters().\n")
+  power_result <- NULL
+}
+```
+
+## Discovery Analysis
+
+```{r run-discovery}
+cat("Running discovery analysis with", n_processors, "processors\n")
+
+sceptre_object_merged <- sceptre::run_discovery_analysis(
+  sceptre_object = sceptre_object_merged,
+  parallel = TRUE,
+  n_processors = n_processors
+)
+
+print(sceptre_object_merged)
+discovery_result <- sceptre::get_result(
+  sceptre_object = sceptre_object_merged,
+  analysis = "run_discovery_analysis"
+)
+cat("Discovery results rows:", nrow(discovery_result), "\n")
+print(head(discovery_result))
+```
+
+## Write Outputs
+
+```{r write-outputs}
+cat("Writing outputs to:", merged_run_dir, "\n")
+
+sceptre::write_outputs_to_directory(
+  sceptre_object = sceptre_object_merged,
+  directory = file.path(merged_run_dir, "sceptre_outputs")
+)
+
+# Export discovery and calibration results to TSV
+data.table::fwrite(
+  as.data.table(discovery_result),
+  file.path(merged_run_dir, "sceptre_discovery_results.tsv"),
+  sep = "\t"
+)
+
+data.table::fwrite(
+  as.data.table(calibration_result),
+  file.path(merged_run_dir, "sceptre_calibration_results.tsv"),
+  sep = "\t"
+)
+
+if (!is.null(power_result)) {
+  data.table::fwrite(
+    as.data.table(power_result),
+    file.path(merged_run_dir, "sceptre_power_check_results.tsv"),
+    sep = "\t"
+  )
+}
+
+# Save post-pipeline object
+saveRDS(sceptre_object_merged, file.path(merged_run_dir, "sceptre_object_post_pipeline.rds"))
+
+cat("Files saved to:", merged_run_dir, "\n")
+list.files(merged_run_dir, recursive = TRUE)
+```
+
+## Summary
+
+```{r summary}
+summary_dt <- data.table(
+  analysis_type = "merged_replicates",
+  prefix = prefix,
+  integration_strategy = integration_strategy,
+  n_cells = ncol(sceptre_object_merged@response_matrix[[1]]),
+  n_discovery_rows = nrow(discovery_result),
+  n_significant = sum(discovery_result$significant %in% TRUE, na.rm = TRUE),
+  n_power_rows = if (!is.null(power_result)) nrow(power_result) else NA_integer_,
+  n_calibration_rows = nrow(calibration_result),
+  n_processors = n_processors,
+  merged_run_dir = merged_run_dir
+)
+
+data.table::fwrite(summary_dt, file.path(tables_dir, paste0("sceptre_pipeline_", prefix, "_", integration_strategy, ".tsv")), sep = "\t")
+
+cat("\n=== MERGED REPLICATES ANALYSIS SUMMARY ===\n")
+print(summary_dt)
+```
+
+## Output Files
+
+```{r output-files}
+cat("Run directories:\n")
+print(list.files(runs_dir, full.names = FALSE))
+cat("Tables directory files:\n")
+print(list.files(tables_dir, full.names = FALSE))
+```

@@ -1,0 +1,428 @@
+---
+title: "qc_experiment"
+output: html_document
+---
+
+
+```{r}
+library(Seurat)
+library(data.table)
+library(Matrix)
+library(here)
+library(ggplot2)
+library(stringr)
+
+source(here("scripts", "R", "utils.R"))
+```
+
+# Load h5 RDS
+
+Load the rds file containing the merged Seurat object created by `combine_h5_counts.Rmd`.
+
+```{r}
+seu <- readRDS(here("results", "qc_experiment", "combined_cdna_seurat.rds"))
+seu
+```
+
+## Guide pool QC comparison
+
+```{r}
+# Load guide counts from the pool QC
+guide_counts_path <- here("results", "guide_pool_qc", "guide_counts.tsv")
+guide_counts_qc <- fread(guide_counts_path)
+# Normalize guide IDs (convert underscores to hyphens to match Seurat normalization)
+guides_in_qc <- unique(gsub("_", "-", guide_counts_qc$guide_id, fixed = TRUE))
+
+# Get gRNA counts from the Seurat object
+if ("gRNA" %in% names(seu@assays)) {
+  grna_counts_mat <- GetAssayData(seu, assay = "gRNA", layer = "counts")
+  guide_umi_df <- data.table(
+    guide_id = rownames(grna_counts_mat),
+    total_umis = Matrix::rowSums(grna_counts_mat)
+  )
+  
+  # Mark guides as being in the pool QC file
+  guide_umi_df[, in_pool_qc := guide_id %in% guides_in_qc]
+  guide_umi_df[, pool_status := fifelse(in_pool_qc, "In Pool QC", "Not in Pool QC")]
+  
+  # Plot the distribution
+  p <- ggplot(guide_umi_df, aes(x = total_umis, fill = pool_status)) +
+    geom_histogram(bins = 50, alpha = 0.7, position = "identity") +
+    scale_x_log10() +
+    scale_fill_manual(
+      values = c("In Pool QC" = "steelblue", "Not in Pool QC" = "coral"),
+      guide = guide_legend(title = "Guide Status")
+    ) +
+    labs(
+      title = "gRNA UMI Distribution: Pool QC vs All Guides",
+      x = "Total UMIs per guide (log10 scale)",
+      y = "Number of Guides"
+    ) +
+    theme_minimal(base_size = 12) +
+    theme(legend.position = "top")
+  print(p)
+  
+  # Summary statistics
+  cat("\nGuide UMI Summary by Pool QC Status:\n")
+  print(guide_umi_df[, .(
+    count = .N,
+    mean_umis = mean(total_umis),
+    median_umis = median(total_umis),
+    min_umis = min(total_umis),
+    max_umis = max(total_umis)
+  ), by = pool_status])
+}
+```
+
+## Keep Only Pool QC Guides
+
+```{r}
+if ("gRNA" %in% names(seu@assays)) {
+  grna_counts <- GetAssayData(seu, assay = "gRNA", layer = "counts")
+  grna_feature_meta <- seu[["gRNA"]][[]]
+  guides_to_keep <- intersect(rownames(grna_counts), guides_in_qc)
+
+  if (length(guides_to_keep) == 0) {
+    stop("No overlapping guides found between gRNA assay and guide_pool_qc/guide_counts.tsv")
+  }
+
+  seu[["gRNA"]] <- Seurat::CreateAssayObject(
+    counts = grna_counts[guides_to_keep, , drop = FALSE]
+  )
+
+  # Preserve feature metadata (including element) after filtering guides.
+  seu[["gRNA"]] <- SeuratObject::AddMetaData(
+    object = seu[["gRNA"]],
+    metadata = grna_feature_meta[guides_to_keep, , drop = FALSE]
+  )
+
+  cat("Retained gRNA guides:", nrow(seu[["gRNA"]]), "\n")
+  cat("Guides with non-missing element metadata:", sum(!is.na(seu[["gRNA"]][[]]$element)), "\n")
+  cat("Cells retained:", ncol(seu), "\n")
+}
+```
+
+# Pre-filter summary
+
+## Knee-plot
+
+```{r}
+plot_knee_by_sample(
+  seu = seu,
+  assay = "RNA",
+  sample_col = "sample",
+  label_col = "sample"
+)
+
+```
+
+## Compute QC metrics
+
+```{r}
+rna_feature_metadata <- seu[["RNA"]][[]]
+gtf_path <- here("data", "gencode.v32.primary_assembly.annotation.gtf.gz")
+gene_type_cache_path <- here("results", "qc_experiment", "gencode_v32_gene_types.tsv")
+
+gene_types <- fetch_gene_types_from_gtf(
+  gene_ids = rna_feature_metadata$gene_id,
+  gtf_path = gtf_path,
+  cache_path = gene_type_cache_path
+)
+rna_feature_metadata$gene_type <- gene_types$gene_type
+rna_feature_metadata$is_protein_coding <- rna_feature_metadata$gene_type %in% "protein_coding"
+
+mito_features <- rownames(rna_feature_metadata)[
+  grepl("^MT-", rna_feature_metadata$gene_symbol)
+]
+ribo_features <- rownames(rna_feature_metadata)[
+  grepl("^RPS|^RPL|^RRP|^MRP|^FAU", rna_feature_metadata$gene_symbol)
+]
+targeted_features <- rownames(rna_feature_metadata)[
+  rna_feature_metadata$is_readout_gene %in% TRUE
+]
+protein_coding_features <- rownames(rna_feature_metadata)[
+  rna_feature_metadata$is_protein_coding %in% TRUE
+]
+
+stopifnot(length(mito_features) > 0)
+stopifnot(length(ribo_features) > 0)
+stopifnot(length(targeted_features) > 0)
+stopifnot(length(protein_coding_features) > 0)
+
+seu[["percent.mt"]] <- compute_feature_percentage(
+  seu,
+  features = mito_features,
+  assay = "RNA"
+)
+seu[["percent.ribo"]] <- compute_feature_percentage(
+  seu,
+  features = ribo_features,
+  assay = "RNA"
+)
+seu[["percent.targeted"]] <- compute_feature_percentage(
+  seu,
+  features = targeted_features,
+  assay = "RNA"
+)
+seu[["percent.protein_coding"]] <- compute_feature_percentage(
+  seu,
+  features = protein_coding_features,
+  assay = "RNA"
+)
+```
+
+```{r}
+p <- plot_hist_with_group_medians(
+  df = seu@meta.data,
+  value_col = "percent.mt",
+  group_col = "sample",
+  title = "Mitochondrial Percentage Distribution",
+  xlab = "UMIs from Mitochondrial genes(%)"
+)
+p
+```
+
+```{r}
+p <- plot_hist_with_group_medians(
+  df = seu@meta.data,
+  value_col = "percent.ribo",
+  group_col = "sample",
+  title = "Ribosomal Percentage Distribution",
+  xlab = "UMIs from Ribosomal genes(%)"
+)
+p
+```
+
+
+```{r}
+p <- plot_hist_with_group_medians(
+  df = seu@meta.data,
+  value_col = "percent.targeted",
+  group_col = "sample",
+  title = "Targeted Genes Percentage Distribution",
+  xlab = "UMIs from Targeted genes(%)"
+)
+p
+```
+
+```{r}
+p <- plot_hist_with_group_medians(
+  df = seu@meta.data,
+  value_col = "percent.protein_coding",
+  group_col = "sample",
+  title = "Protein-coding Genes Percentage Distribution",
+  xlab = "UMIs from Protein-coding genes(%)"
+)
+p
+```
+
+
+
+```{r}
+VlnPlot(seu, features = c("percent.mt", "percent.ribo", "percent.targeted", "percent.protein_coding", "nCounts"), group.by = "sample", ncol = 2) + 
+  theme(legend.position = "none")
+```
+
+```{r}
+VlnPlot(seu, features = c("nCount_RNA", "nCount_gRNA", "nFeature_RNA", "nFeature_gRNA"), group.by = "sample", ncol = 2) + 
+  theme(legend.position = "none")
+```
+
+```{r}
+FeatureScatter(seu, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + 
+  geom_hline(yintercept = 10, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = 500, linetype = "dashed", color = "blue") +
+  labs(title = "nCount_RNA vs percent.mt")
+```
+
+
+# Compare with scRNA
+
+```{r}
+# scRNA mean UMI counts
+scrna_5prime_fnp <- here("data", "D0_10x5prime_pilot_counts_summary_ribo15_mt15_umi2000.tsv")
+scrna_5prime <- fread(scrna_5prime_fnp)
+
+output_dir <- here("results", "qc_experiment")
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+
+counts_umi_mat <- GetAssayData(seu, assay = "RNA", layer = "counts")
+rna_feature_metadata <- as.data.table(seu[["RNA"]][[]], keep.rownames = "feature_id")
+
+mean_umi_df <- data.table(
+  feature_id = rownames(counts_umi_mat),
+  mean_umi_validation = Matrix::rowMeans(counts_umi_mat)
+)
+mean_umi_df <- merge(
+  mean_umi_df,
+  rna_feature_metadata[, .(feature_id, gene_symbol, ensembl_id = gene_id, is_readout_gene)],
+  by = "feature_id",
+  all.x = TRUE,
+  sort = FALSE
+)
+
+reference_umi <- copy(scrna_5prime)
+umi_comparison_df <- merge(
+  mean_umi_df[is_readout_gene %in% TRUE],
+  reference_umi[, .(ensembl_id, mean_umi_reference = mean_umi, mean_upm)],
+  by = "ensembl_id",
+  all.x = TRUE,
+  sort = FALSE
+)
+
+x_thresh <- 30
+y_thresh <- 1
+
+umi_comparison_df[, mean_upm_plot := fifelse(is.na(mean_upm) | mean_upm <= 0, 0.01, mean_upm)]
+umi_comparison_df[, mean_umi_validation_plot := fifelse(
+  is.na(mean_umi_validation) | mean_umi_validation <= 0,
+  0.01,
+  mean_umi_validation
+)]
+umi_comparison_df[, quadrant := fifelse(
+  mean_upm_plot >= x_thresh & mean_umi_validation_plot >= y_thresh,
+  "Q1",
+  fifelse(
+    mean_upm_plot < x_thresh & mean_umi_validation_plot >= y_thresh,
+    "Q2",
+    fifelse(
+      mean_upm_plot < x_thresh & mean_umi_validation_plot < y_thresh,
+      "Q3",
+      "Q4"
+    )
+  )
+)]
+
+# Load Table S3 and identify significant genes for WTC11
+table_s3_path <- here("data", "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
+table_s3 <- fread(table_s3_path)
+
+# Get the unique elements (gRNA targets) present in the Seurat object
+grna_elements <- unique(seu[["gRNA"]][[]]$element)
+grna_elements <- grna_elements[!is.na(grna_elements) & nzchar(grna_elements)]
+
+# Filter for WTC11 cell line with significant == TRUE AND element in the gRNA assay
+wtc11_significant_genes <- unique(
+  table_s3[
+    cell_type == "WTC11" & 
+    significant == TRUE & 
+    intended_target_name_hg38 %in% grna_elements,
+    gene_id
+  ]
+)
+
+# Mark genes as significant in the comparison dataframe
+umi_comparison_df[, is_significant := ensembl_id %in% wtc11_significant_genes]
+
+# Split quadrant counts by significance for on-plot labels.
+quad_counts <- umi_comparison_df[
+  , .(
+    n_total = .N,
+    n_sig = sum(is_significant %in% TRUE, na.rm = TRUE),
+    n_not_sig = sum(!(is_significant %in% TRUE), na.rm = TRUE)
+  ),
+  by = quadrant
+]
+quad_counts <- merge(
+  data.table(quadrant = c("Q1", "Q2", "Q3", "Q4")),
+  quad_counts,
+  by = "quadrant",
+  all.x = TRUE,
+  sort = FALSE
+)
+quad_counts[is.na(n_total), c("n_total", "n_sig", "n_not_sig") := .(0L, 0L, 0L)]
+quad_counts
+
+x_min <- min(umi_comparison_df$mean_upm_plot, na.rm = TRUE)
+x_max <- max(umi_comparison_df$mean_upm_plot, na.rm = TRUE)
+y_min <- min(umi_comparison_df$mean_umi_validation_plot, na.rm = TRUE)
+y_max <- max(umi_comparison_df$mean_umi_validation_plot, na.rm = TRUE)
+
+label_df <- data.table(
+  quadrant = c("Q1", "Q2", "Q3", "Q4"),
+  x = c(
+    10^(log10(x_thresh) + (log10(x_max) - log10(x_thresh)) * 0.8),
+    10^(log10(x_min) + (log10(x_thresh) - log10(x_min)) * 0.1),
+    10^(log10(x_min) + (log10(x_thresh) - log10(x_min)) * 0.1),
+    10^(log10(x_thresh) + (log10(x_max) - log10(x_thresh)) * 0.8)
+  ),
+  y = c(
+    10^(log10(y_thresh) + (log10(y_max) - log10(y_thresh)) * 0.5),
+    10^(log10(y_thresh) + (log10(y_max) - log10(y_thresh)) * 0.5),
+    10^(log10(y_min) + (log10(y_thresh) - log10(y_min)) / 2),
+    10^(log10(y_min) + (log10(y_thresh) - log10(y_min)) / 2)
+  )
+)
+label_df <- merge(label_df, quad_counts, by = "quadrant", all.x = TRUE, sort = FALSE)
+label_df[, label := paste0(quadrant, ": ", n_total, " (sig: ", n_sig, ", non-sig: ", n_not_sig, ")")]
+
+p <- ggplot(
+  umi_comparison_df,
+  aes(x = mean_upm_plot, y = mean_umi_validation_plot, color = is_significant)
+) +
+  geom_point(alpha = 0.7, size = 2) +
+  geom_hline(yintercept = y_thresh, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = x_thresh, linetype = "dashed", color = "blue") +
+  geom_text(
+    data = label_df,
+    aes(x = x, y = y, label = label),
+    hjust = 0,
+    vjust = 0,
+    size = 4,
+    fontface = "bold",
+    inherit.aes = FALSE
+  ) +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_color_manual(
+    values = c("FALSE" = "grey50", "TRUE" = "green3"),
+    labels = c("FALSE" = "Not significant", "TRUE" = "Significant in WTC11"),
+    guide = guide_legend(title = "Table S3 WTC11")
+  ) +
+  labs(
+    title = "Mean UMIs per targeted gene vs reference scRNA",
+    x = "Mean UPM in reference scRNA",
+    y = "Mean UMIs per gene in validation dataset"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(plot.title = element_text(face = "bold"))
+print(p)
+
+ggsave(
+  filename = file.path(output_dir, "compare_to_reference_scRNA.png"),
+  plot = p,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+ggsave(
+  filename = file.path(output_dir, "compare_to_reference_scRNA.pdf"),
+  plot = p,
+  width = 8,
+  height = 6
+)
+
+fwrite(
+  umi_comparison_df[, .(
+    gene_symbol,
+    ensembl_id,
+    mean_umi_validation,
+    mean_umi_reference,
+    mean_upm,
+    quadrant
+  )],
+  file = file.path(output_dir, "gene_umi_comparison_quadrants.tsv"),
+  sep = "\t"
+)
+```
+
+## Write final Seurat object with only pool QC guides and computed QC metrics
+
+```{r}
+saveRDS(seu,file.path(output_dir, "combined_cdna_seurat_filtered.rds"))
+
+```
+
+
+
+
