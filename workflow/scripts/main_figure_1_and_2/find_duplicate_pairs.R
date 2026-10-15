@@ -77,8 +77,8 @@ duplicates <- dc_tap_duplicates %>%
 plot_data <- duplicates %>%
   filter(dc_tap.DistalElement_Gene & training.DistalElement_Gene) %>%
   mutate(color_code = case_when(
-    (dc_tap.significant & dc_tap.pct_change_effect_size < 0) & 
-      (training.significant & training.pct_change_effect_size < 0) ~ "darkblue",
+    # significant in both screens, either direction (Fig. 2f)
+    dc_tap.significant & training.significant ~ "darkblue",
     TRUE ~ "grey"
   ))
 

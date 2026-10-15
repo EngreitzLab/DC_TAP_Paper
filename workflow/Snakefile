@@ -64,13 +64,19 @@ rule create_main_figures_4_5_6:
     rules.main_figure_4_direct_indirect_effects.output,
     rules.main_figure_5_chromatin_categories.output,
     rules.main_figure_5_housekeeping_genes.output,
-    rules.main_figure_6_model_scores.output
+    rules.main_figure_6_model_scores.output,
+    rules.main_figure_2e_dctap_vs_qpcr.output
 
-# All data panels of main Figures 1-6
+# All data panels of main Figures 1-6. Figs. 2b, 2c, 3a and 3b use the final calls (FDR 20%,
+# positive controls excluded) from rules/figures_wo_positive_controls.smk.
 rule make_main_figures:
   input:
     "results/main_figure_1_and_2/create_main_figure_1_and_2.done",
     "results/main_figure_3/create_main_figure_3.done",
+    rules.distance_by_effect_size_plots_FDR_wo_pos_controls.output,
+    rules.effect_size_plots_FDR_wo_pos_controls.output,
+    rules.compare_effect_sizes_to_other_screens_FDR_wo_pos_controls.output,
+    rules.power_to_detect_change_for_all_datasets_FDR_wo_pos_controls.output,
     rules.create_main_figures_4_5_6.input
 
 # Create the supplementary tables

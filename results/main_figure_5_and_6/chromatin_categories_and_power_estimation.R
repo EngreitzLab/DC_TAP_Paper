@@ -520,6 +520,13 @@ message("Categorized genome-wide pairs!")
 
 # read categorized pairs (re-created above in "categorize" mode, otherwise taken from the repository)
 crispr_sceptre <- fread(crispr_sceptre_categorized_file, sep = "\t")
+
+# DC-TAP-seq pairs: use the final calls in Table S3 (FDR 20%, positive controls excluded) instead of
+# the earlier DC-TAP-seq rows in the categorized pairs file; keep Gasperini et al. pairs from that file
+table_s3_file <- "results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
+dc_tap_table_s3 <- read_dc_tap_table_s3(table_s3_file, filter_to_random_DEG = TRUE) %>%
+    rename_with(~ sub("_wo_pos_controls_20fdr$", "", .x), starts_with("power_at"))
+crispr_sceptre <- bind_rows(filter(crispr_sceptre, Dataset == "Gasperini2019"), dc_tap_table_s3)
 gw_pairs <- fread(file.path(recat_dir, "all_gw_pairs.categorized.summary.tsv"), sep = "\t")
 
 ### --- PLOT CHROMATIN CATEGORY PROPORTIONS ---
@@ -585,8 +592,20 @@ for (use_allpower in c(TRUE, FALSE)){
 ### --- ESTIMATE UNDETECTED VS DETECTED SIGNIFICANT POSITIVES ---
 this_out <- file.path(this_results_dir, "detected_positives"); dir.create(this_out, showWarnings = FALSE)
 out_prefix <- paste0(this_out, "/5_10_")
-es_bins <- c("<=5%", "(5%, 10%]", "(10%, 15%]", "(15%, 25%]", "(25%, 50%]", "(50%, Inf)")
-bin_min <- c(0, 5, 10, 15, 25, 50); names(bin_min) <- es_bins
-bin_max <- c(5, 10, 15, 25, 50, Inf); names(bin_max) <- es_bins        
-plot_positives_by_effect_size(crispr_sceptre, es_bins, bin_min, bin_max, "Regulated", out_prefix)
+es_bins <- c("<=5%", "(5%, 10%]", "(10%, 15%]", "(15%, 20%]", "(20%, 25%]", "(25%, 50%]", "(50%, Inf)")
+bin_min <- c(0, 5, 10, 15, 20, 25, 50); names(bin_min) <- es_bins
+bin_max <- c(5, 10, 15, 20, 25, 50, Inf); names(bin_max) <- es_bins
+# Fig. 3c: effect size bins are in %, both DC-TAP-seq screens are combined, and Gasperini et al.
+# pairs come from the reprocessed Gasperini results also used for Fig. 3a,b (FDR 20%, positive controls excluded)
+gasperini_results_file <- "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv"
+gasperini_detected <- fread(gasperini_results_file, sep = "\t") %>%
+    filter(DistalElement_Gene == TRUE) %>%
+    transmute(Dataset = "Gasperini2019", EffectSize = pct_change_effect_size,
+        Regulated = significant_wo_pos_controls_20fdr & pct_change_effect_size < 0,
+        across(ends_with("_wo_pos_controls_20fdr") & starts_with("power_at_effect_size_"), .names = "{sub('_wo_pos_controls_20fdr$', '', .col)}"))
+dc_tap_detected <- crispr_sceptre %>%
+    filter(Dataset %in% c("K562_DC_TAP", "WTC11_DC_TAP")) %>%
+    transmute(Dataset = "all_DC_TAP", EffectSize = EffectSize * 100, Regulated, across(starts_with("power_at_effect_size_")))
+crispr_detected <- bind_rows(gasperini_detected, dc_tap_detected)
+plot_positives_by_effect_size(crispr_detected, es_bins, bin_min, bin_max, "Regulated", out_prefix)
 

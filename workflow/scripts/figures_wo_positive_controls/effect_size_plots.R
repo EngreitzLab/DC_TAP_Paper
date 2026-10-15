@@ -29,7 +29,7 @@ screen_results <- read_tsv(snakemake@input$screen_results)
 
 # Make a plot for all Random Distal Element Gene Pairs that are are significant and have a negative effect size
 effect_size_boxplot <- screen_results %>%
-  filter(Random_DistalElement_Gene, significant_wo_pos_controls, pct_change_effect_size < 0) %>%
+  filter(Random_DistalElement_Gene, significant_wo_pos_controls_20fdr, pct_change_effect_size < 0) %>%
   ggplot(aes(x = cell_type, y = pct_change_effect_size, fill = cell_type)) +
   geom_boxplot(outlier.shape = NA) +
   geom_jitter(width = 0.2, size = 0.9, alpha = 0.8) +
@@ -42,10 +42,10 @@ effect_size_boxplot <- screen_results %>%
     legend.position = "none"
   )
 
-# Let's look at all pairs labelled as tss_pos in the screen design
+# All self-promoter pairs with a significant negative effect (positive controls have no FDR 20% call,
+# so these use the original SCEPTRE significance)
 positive_control_self_promoters_effect_size_boxplot <- screen_results %>%
-  filter(Positive_Control_selfPromoter) %>%
-  filter(significant | power_at_effect_size_15 >= 0.8) %>%
+  filter(selfPromoter, significant, pct_change_effect_size < 0) %>%
   ggplot(aes(x = cell_type, y = pct_change_effect_size)) +
   geom_boxplot(aes(fill = cell_type), outlier.shape = NA, show.legend = FALSE) +
   geom_jitter(aes(color = significant), width = 0.2, size = 0.9, alpha = 0.8) +

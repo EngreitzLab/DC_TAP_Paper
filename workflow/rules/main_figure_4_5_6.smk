@@ -32,7 +32,9 @@ rule main_figure_5_chromatin_categories:
     script = "results/main_figure_5_and_6/chromatin_categories_and_power_estimation.R",
     functions = "results/main_figure_5_and_6/housekeeping_gene_plot_functions.R",
     dc_tap_gasperini = "results/main_figure_5_and_6/categorized_pairs/dc_tap_gasperini.random_distal_element_pairs.categorized.tsv.gz",
-    genome_wide_pairs = "results/main_figure_5_and_6/categorized_pairs/all_gw_pairs.categorized.summary.tsv"
+    genome_wide_pairs = "results/main_figure_5_and_6/categorized_pairs/all_gw_pairs.categorized.summary.tsv",
+    table_s3 = "results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv",
+    gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv"
   output:
     fig5b = "results/main_figure_5_and_6/categorized_pairs/proportion_by_cell_type.element_category.de_weighted.combine_dc_tap.pdf",
     fig5b_by_cell_type = "results/main_figure_5_and_6/categorized_pairs/proportion_by_cell_type.element_category.de_weighted.for_dc_tap.pdf",
@@ -67,3 +69,14 @@ rule main_figure_6_model_scores:
   log: "results/main_figure_5_and_6/logs/main_figure_6_model_scores.log"
   shell:
     "Rscript {input.script} {input.crispr_benchmark} results/main_figure_5_and_6 > {log} 2>&1"
+
+# Figure 2e: DC-TAP-seq vs qPCR effect sizes for selected gRNAs (K562 and WTC11)
+rule main_figure_2e_dctap_vs_qpcr:
+  input:
+    script = "workflow/scripts/main_figure_1_and_2/plot_dctap_vs_qpcr_effect_sizes.R",
+    effect_sizes = "resources/main_figure_1_and_2/qpcr_validation/k562_wtc11_qpcr_vs_dctap_effect_sizes.tsv"
+  output:
+    "results/main_figure_1_and_2/qpcr_validation/dctap_vs_qpcr_effect_sizes.pdf"
+  log: "results/main_figure_1_and_2/logs/main_figure_2e_dctap_vs_qpcr.log"
+  shell:
+    "Rscript {input.script} {input.effect_sizes} {output} > {log} 2>&1"

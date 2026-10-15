@@ -16,3 +16,6 @@ results/process_validation_datasets/WTC11_DC_TAP_Seq/raw_counts/dge.rds
 results/process_validation_datasets/WTC11_DC_TAP_Seq/raw_counts/perturb_status.rds
 # Fig. 2f, Fig. 3a,b: reprocessed Gasperini et al. results
 results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories.tsv
+# Figs. 2-3 (FDR 20%, positive controls excluded): reprocessed Gasperini et al. results with final calls.
+# Second column: source directory key (see workflow/scripts/link_large_inputs.sh); default is the first source.
+results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv	fdr20_run
