@@ -203,21 +203,27 @@ trans_rates_plot <- trans_rates %>%
   mutate(cell_type = sub("_DC_TAPseq", "", dataset)) %>% 
   mutate(effect_direction = str_to_title(sub("positive_rate_", "", effect_direction)))  
 
-# plot cis and trans hit rates as function of distance to TSS
-ggplot(cis_rates_plot,
-       aes(x = mean_dist / 1e6, y = positive_rate, color = cell_type, shape = effect_direction)) +
-  facet_wrap(~cell_type, scales = "free") +
-  geom_point() +
-  geom_hline(data = trans_rates_plot, aes(yintercept = positive_rate, linetype = effect_direction,
-                                          color = cell_type)) +
-  labs(title = "Positive hit rates cis and trans analyses", x = "Distance to TSS (Mb)",
-       y = "Positive hite rate", color = "Cell type", shape = "Effect direction",
-       linetype = "Effect direction") +
-  scale_color_manual(values = c(K562 = "#b00404", WTC11 = "#0202cc")) +  
+# plot cis hit rates as function of distance to TSS, one panel per effect direction (Fig. 4b). The
+# distance-independent indirect (trans) effect rate is shown at an extra "Other chromosomes" position.
+other_chr_x <- 1.15
+direction_labels <- c(Negative = "Negative effects on expression", Positive = "Positive effects on expression")
+ggplot(cis_rates_plot, aes(x = mean_dist / 1e6, y = positive_rate, color = cell_type, shape = effect_direction)) +
+  facet_wrap(~effect_direction, labeller = labeller(effect_direction = direction_labels)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey80") +
+  geom_point(size = 2) +
+  geom_point(data = trans_rates_plot, aes(x = other_chr_x), size = 2) +
+  labs(x = "Distance to TSS (Mb)", y = "Rate of observed effects (%)", color = "Cell type",
+       shape = "Direction of effect") +
+  scale_color_manual(values = c(K562 = "#b00404", WTC11 = "#0202cc")) +
   scale_shape_manual(values = c(Negative = 19, Positive = 1)) +
-  scale_y_continuous(limits = c(NA, max(cis_rates_plot$positive_rate)), labels = scales::percent) +
+  scale_x_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1, other_chr_x),
+                     labels = c("0.00", "0.25", "0.50", "0.75", "1.00", "Other\nchromosomes"),
+                     expand = expansion(mult = c(0.03, 0.12))) +
+  scale_y_continuous(limits = c(0, max(cis_rates_plot$positive_rate)), breaks = seq(0, 0.12, 0.03),
+                     labels = function(x) x * 100) +
   theme_classic() +
-  theme(strip.background = element_blank())
+  theme(strip.background = element_blank(), strip.text = element_text(face = "bold", size = 11),
+        legend.position = "top")
 ```
 
 ```{r savePlot1, echo=FALSE}
@@ -370,8 +376,8 @@ supports that these have a higher proportion of effects from indirect, e.g. tran
 ```{r countSigPDirect}
 # annotate results of direct vs indirect effect probability is >0.9 or <0.2
 random_pairs <- random_pairs %>% 
-  mutate(p90 = if_else(direct_vs_indirect_negative > 0.9, true = "Prob. direct > 0.9",
-                       false = "Prob. direct <= 0.9"))
+  mutate(p90 = if_else(direct_vs_indirect_negative > 0.9, true = ">0.9",
+                       false = "<= 0.9"))
 
 # count number of significant pairs with positive and negative effects for pairs with direct vs
 # indirect effect probability greater or lower than 0.9
@@ -394,7 +400,7 @@ separately.
 ```{r plotEffectDirectionPDirect1, fig.height=4, fig.width=5}
 # transform to long format for plotting
 pairs_p90_plot <- pairs_p90 %>% 
-  mutate(plot_label = paste0(p90, " (n=", significant, ")")) %>% 
+  mutate(plot_label = paste0(p90, "\n(n=", significant, ")")) %>% 
   select(cell_type, plot_label, prop_negative, prop_positive) %>% 
   pivot_longer(cols = c(prop_negative, prop_positive), names_to = "Effect direction",
                values_to = "% significant pairs") %>% 
@@ -403,14 +409,13 @@ pairs_p90_plot <- pairs_p90 %>%
 # plot the proportion of negative vs positives based on probability to be a direct effect
 ggplot(pairs_p90_plot, aes(x = fct_rev(plot_label), y = `% significant pairs`, fill = `Effect direction`)) +
   facet_wrap(~ cell_type, scales = "free", drop = TRUE) +
-  geom_bar(stat = "identity") +
-  geom_hline(yintercept = 0.5, size = 0.25) +
-  labs(title = "Negative vs. postive effects") +
-  scale_fill_manual(values = c(Negative = "steelblue", Positive = "firebrick3")) +
-  scale_y_continuous(labels = scales::percent) +
+  geom_bar(stat = "identity", color = "black", linewidth = 0.4) +
+  geom_hline(yintercept = 0.5, linewidth = 0.4) +
+  labs(x = "Probability of direct effect", y = "Significant DE-G pairs (%)", fill = "Direction of effect") +
+  scale_fill_manual(values = c(Negative = "grey75", Positive = "white")) +
+  scale_y_continuous(labels = function(x) x * 100) +
   theme_classic() +
-  theme(axis.title.x = element_blank(), strip.background = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(strip.background = element_blank(), legend.position = "top")
 ```
 
 Plot proportions for both experiments combined.
@@ -427,7 +432,7 @@ pairs_p90_combined <- random_pairs %>%
 
 # transform to long format for plotting
 pairs_p90_combined_plot <- pairs_p90_combined %>% 
-  mutate(plot_label = paste0(p90, " (n=", significant, ")")) %>% 
+  mutate(plot_label = paste0(p90, "\n(n=", significant, ")")) %>% 
   select(plot_label, prop_negative, prop_positive) %>% 
   pivot_longer(cols = c(prop_negative, prop_positive), names_to = "Effect direction",
                values_to = "% significant pairs") %>% 
@@ -436,14 +441,13 @@ pairs_p90_combined_plot <- pairs_p90_combined %>%
 # plot the proportion of negative vs positives based on probability to be a direct effect
 ggplot(pairs_p90_combined_plot,
        aes(x = fct_rev(plot_label), y = `% significant pairs`, fill = `Effect direction`)) +
-  geom_bar(stat = "identity") +
-  geom_hline(yintercept = 0.5, size = 0.25) +
-  labs(title = "Negative vs. postive effects") +
-  scale_fill_manual(values = c(Negative = "steelblue", Positive = "firebrick3")) +
-  scale_y_continuous(labels = scales::percent) +
+  geom_bar(stat = "identity", color = "black", linewidth = 0.4) +
+  geom_hline(yintercept = 0.5, linewidth = 0.4) +
+  labs(x = "Probability of direct effect", y = "Significant DE-G pairs (%)", fill = "Direction of effect") +
+  scale_fill_manual(values = c(Negative = "grey75", Positive = "white")) +
+  scale_y_continuous(labels = function(x) x * 100) +
   theme_classic() +
-  theme(axis.title.x = element_blank(), strip.background = element_blank(),
-        axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(strip.background = element_blank(), legend.position = "top")
 ```
 
 ```{r, savePlot3, echo=FALSE}
@@ -465,7 +469,7 @@ ggplot(random_pairs_hits, aes(x = cell_type, y = log_2_FC_effect_size, color = f
   geom_boxplot(color = "black", fill = NA, outlier.shape = NA) +
   labs(title = "CRISPR effect size likely direct vs. indirect enhancer effect",
        y = "CRISPR effect size\n(log2 fold change)", color  = "Probability\ndirect vs indirect") +
-  scale_color_manual(values = c(`Prob. direct > 0.9` = "firebrick3", `Prob. direct <= 0.9` = "steelblue")) +
+  scale_color_manual(values = c(`>0.9` = "firebrick3", `<= 0.9` = "steelblue")) +
   theme_classic() +
   theme(axis.title.x = element_blank())
 ```
