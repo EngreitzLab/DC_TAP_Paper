@@ -80,3 +80,20 @@ rule main_figure_2e_dctap_vs_qpcr:
   log: "results/main_figure_1_and_2/logs/main_figure_2e_dctap_vs_qpcr.log"
   shell:
     "Rscript {input.script} {input.effect_sizes} {output} > {log} 2>&1"
+
+# Figure 1c,d: guide capture efficiency of CROP-seq vs direct-capture vectors, and K562 knockdown vs MOI
+rule main_figure_1cd_guide_capture_and_moi:
+  input:
+    script = "workflow/scripts/main_figure_1_and_2/plot_guide_capture_and_moi_knockdown.R",
+    crop_guides = "resources/main_figure_1_and_2/guide_capture_and_moi_knockdown/P10_tap_all_guide_info.txt",
+    hu6_calls = "resources/main_figure_1_and_2/guide_capture_and_moi_knockdown/protospacer_calls_per_cell_052322_analysis_L-SG-TAP-Whole.csv",
+    mu6_calls = "resources/main_figure_1_and_2/guide_capture_and_moi_knockdown/protospacer_calls_per_cell_052322_analysis_H-DC-TAP-Whole.csv",
+    moi_knockdown = "resources/main_figure_1_and_2/guide_capture_and_moi_knockdown/input_file_for_k562_multi_moi1_panel.txt"
+  output:
+    fig1c = "results/main_figure_1_and_2/guide_capture_and_moi_knockdown/fig1c_guide_umi_capture.pdf",
+    fig1d = "results/main_figure_1_and_2/guide_capture_and_moi_knockdown/fig1d_moi_knockdown.pdf"
+  log: "results/main_figure_1_and_2/logs/main_figure_1cd_guide_capture_and_moi.log"
+  params:
+    input_dir = "resources/main_figure_1_and_2/guide_capture_and_moi_knockdown"
+  shell:
+    "Rscript {input.script} {params.input_dir} {output.fig1c} {output.fig1d} > {log} 2>&1"
