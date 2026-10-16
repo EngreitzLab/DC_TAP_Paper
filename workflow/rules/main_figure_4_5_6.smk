@@ -97,3 +97,13 @@ rule main_figure_1cd_guide_capture_and_moi:
     input_dir = "resources/main_figure_1_and_2/guide_capture_and_moi_knockdown"
   shell:
     "Rscript {input.script} {params.input_dir} {output.fig1c} {output.fig1d} > {log} 2>&1"
+
+# Figure 2i: SLC2A3 qPCR for guide #5742 vs non-targeting (values are in the script)
+rule main_figure_2i_slc2a3_qpcr:
+  input:
+    script = "workflow/scripts/main_figure_1_and_2/plot_slc2a3_qpcr.R"
+  output:
+    "results/main_figure_1_and_2/qpcr_validation/slc2a3_qpcr_guide5742.pdf"
+  log: "results/main_figure_1_and_2/logs/main_figure_2i_slc2a3_qpcr.log"
+  shell:
+    "Rscript {input.script} {output} > {log} 2>&1"

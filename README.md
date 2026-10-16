@@ -95,6 +95,7 @@ Supplementary Tables:
   | 2c | `effect_size_plots` | `scripts/main_figure_1_and_2/effect_size_plots.R` | `results/main_figure_1_and_2/effect_size_boxplot.pdf`, `positive_control_self_promoters_effect_size_boxplot.pdf` |
   | 2d | `wtc11_multi_moi`, `make_replicates_plots` | `scripts/main_figure_1_and_2/wtc11_multi_moi.R`, `make_replicates_plots.R` | `results/main_figure_1_and_2/wtc11_multi_moi.pdf`, `compare_replicates/wtc11_plot.pdf` |
   | 2e | `main_figure_2e_dctap_vs_qpcr` | `scripts/main_figure_1_and_2/plot_dctap_vs_qpcr_effect_sizes.R` | `results/main_figure_1_and_2/qpcr_validation/dctap_vs_qpcr_effect_sizes.pdf` |
+  | 2i | `main_figure_2i_slc2a3_qpcr` | `scripts/main_figure_1_and_2/plot_slc2a3_qpcr.R` (from J. Ray) | `results/main_figure_1_and_2/qpcr_validation/slc2a3_qpcr_guide5742.pdf` |
   | 2f | `find_duplicate_pairs` | `scripts/main_figure_1_and_2/find_duplicate_pairs.R` | `results/main_figure_1_and_2/duplicate_pairs_analysis/duplicate_pairs.pdf` |
   | 2h | `negative_targeting_confidence_interval`, `slc2a3_effect_size_plot` | `scripts/main_figure_1_and_2/slc2a3_effect_size_plot.R` | `results/main_figure_1_and_2/slc2a3_effect_size_barplot.pdf` |
   | 3a | `compare_effect_sizes_to_other_screens` | `scripts/main_figure_3/` | `results/main_figure_3/compare_effect_sizes_to_other_screens/effect_size_comparison.pdf` |
@@ -105,11 +106,11 @@ Supplementary Tables:
   | 5c,d | `main_figure_5_chromatin_categories`, `main_figure_5_housekeeping_genes` | `chromatin_categories_and_power_estimation.R`, `housekeeping_genes.R` | `results/main_figure_5_and_6/{housekeeping_genes,hkg_comparison}/` |
   | 6a–d | `main_figure_6_model_scores` | `results/main_figure_5_and_6/model_scores.R` | `results/main_figure_5_and_6/e2g_model_scores/ENCODE_rE2G/` (ABC and AlphaGenome for Extended Data Fig. 13 in sibling folders) |
 
-  Panels 1a,b, 2a, 4a and 5a are schematics, and 2g is a genome-browser view. Panels 1e, 2d (top) and 2i are not yet scripted.
+  Panels 1a,b, 2a, 4a and 5a are schematics, and 2g is a genome-browser view. Panels 1e and 2d (top) are not yet scripted.
 - Inputs to Figures 4–6 come from other pipelines and are checked in as derived tables:
   - `resources/main_figure_4/indirect_effects/`: output of [CRISPR_indirect_effects](https://github.com/EngreitzLab/CRISPR_indirect_effects) (cis/trans hit rates and the direct-effect model)
   - `resources/main_figure_6/expt_pred_merged_annot.txt.gz`: output of the [CRISPR_comparison](https://github.com/EngreitzLab/CRISPR_comparison) benchmarking pipeline for DC-TAP-seq pairs
-  - `results/main_figure_5_and_6/categorized_pairs/`: chromatin-categorized CRISPR pairs. Re-creating these (`chromatin_categories_and_power_estimation.R categorize`) needs chrom-annotate and ENCODE-rE2G outputs that are not in the repository.
+  - `results/main_figure_5_and_6/categorized_pairs/`: chromatin-categorized CRISPR pairs. These are built from the chromatin annotations and ENCODE-rE2G predictions described in the Methods (ENCODE accessions are listed in the Supplementary Tables); Figs 5 and 6 are reproduced from these tables and Table S3. The upstream categorization can be re-run with `chromatin_categories_and_power_estimation.R categorize` given those annotation outputs.
 - CellRanger outputs are available from NCBI GEO under accession `GSE303901` (see **Data and code availability** below); download them into `resources/process_validation_datasets/{K562,WTC11}_DC_TAP_Seq/cell_ranger_output/` to run `sceptre_setup.smk` from scratch.
 
 ## System Requirements
