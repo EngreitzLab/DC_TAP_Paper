@@ -3,7 +3,7 @@ title: "Combine h5 counts"
 output: html_document
 ---
 
-This notebook loads all filtered Cell Ranger cDNA and gRNA matrices into a single Seurat object, adds per-cell sample metadata from the Terra table, stores `gene_id` plus `gene_symbol` in the RNA feature metadata, and stores guide-level metadata in a gRNA assay when guide capture counts are present.
+This notebook loads all filtered Cell Ranger cDNA and gRNA matrices into a single Seurat object, adds per-cell sample metadata from `metadata/validation_screen_samples.tsv`, stores `gene_id` plus `gene_symbol` in the RNA feature metadata, and stores guide-level metadata in a gRNA assay when guide capture counts are present.
 
 ```{r setup}
 required_packages <- c("Seurat", "data.table", "Matrix", "here", "stringr")
@@ -29,16 +29,16 @@ source(here("scripts", "R", "utils.R"))
 
 ```{r load-seurat-object}
 h5_dir <- here("data", "filtered_h5")
-terra_metadata_path <- here("data", "terra_table_fixed_pairing.tsv")
-guide_reference_path <- here("data", "wtc11_encode_feature_reference_file_dups_removed_FIXED.csv")
-table_s3_path <- here("data", "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
-table_s4_path <- here("data", "Table_S4_primer_gene_list.tsv")
+sample_metadata_path <- here("metadata", "validation_screen_samples.tsv")
+guide_reference_path <- here("data", "GSE303901_wtc11_feature_reference.csv")
+table_s3_path <- here("..", "results", "formatted_dc_tap_results", "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
+table_s4_path <- here("metadata", "Table_S4_primer_gene_list.tsv")
 gtf_path <- here("data", "gencode.v32.primary_assembly.annotation.gtf.gz")
-gene_type_cache_path <- here("results", "qc_experiment", "gencode_v32_gene_types.tsv")
+gene_type_cache_path <- here("results", "qc_experiment_June_2026", "gencode_v32_gene_types.tsv")
 
 combined_cdna <- load_validation_seurat_object(
 	h5_dir = h5_dir,
-	terra_metadata_path = terra_metadata_path,
+	sample_metadata_path = sample_metadata_path,
 	guide_reference_path = guide_reference_path,
 	table_s3_path = table_s3_path,
 	table_s4_path = table_s4_path,
@@ -61,7 +61,7 @@ if ("gRNA" %in% names(combined_cdna@assays)) {
 	Matrix::colSums(GetAssayData(combined_cdna, assay = "gRNA", layer = "counts") > 0)[1:10]
 }
 
-output_dir <- here("results", "qc_experiment")
+output_dir <- here("results", "qc_experiment_June_2026")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 
 saveRDS(

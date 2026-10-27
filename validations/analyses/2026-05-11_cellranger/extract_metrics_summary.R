@@ -13,27 +13,16 @@ repo_root <- normalizePath(
 	mustWork = TRUE
 )
 
-terra_metadata_path <- file.path(repo_root, "data", "terra_table_fixed_pairing.tsv")
-output_dir <- file.path(repo_root, "results", "cellranger")
+sample_metadata_path <- file.path(repo_root, "metadata", "validation_screen_samples.tsv")
+source_data_path <- file.path(repo_root, "analyses", "2026-05-11_cellranger", "source_data", "cellranger_metrics_summary.tsv")
+output_dir <- file.path(repo_root, "results", "cellranger_june_2026")
 output_path <- file.path(output_dir, "cellranger_metrics_summary.tsv")
 plot_dir <- file.path(output_dir, "pngs")
 
-system_bins <- c("/usr/bin", "/bin", "/usr/sbin", "/sbin")
-current_path <- strsplit(Sys.getenv("PATH"), .Platform$path.sep, fixed = TRUE)[[1]]
-Sys.setenv(PATH = paste(unique(c(system_bins, current_path)), collapse = .Platform$path.sep))
-
-gsutil_candidates <- unique(c(
-	Sys.which("gsutil"),
-	path.expand("~/Programs/google-cloud-sdk/bin/gsutil"),
-	"/opt/homebrew/bin/gsutil",
-	"/usr/local/bin/gsutil"
-))
-gsutil_candidates <- gsutil_candidates[nzchar(gsutil_candidates)]
-gsutil_path <- gsutil_candidates[file.exists(gsutil_candidates)][1]
-
-if (is.na(gsutil_path) || !nzchar(gsutil_path)) {
-	stop("Could not find gsutil. Install Google Cloud SDK or add gsutil to PATH.")
-}
+# Folder (local path or gs:// URI) holding one Cell Ranger output folder per sample.
+# The Cell Ranger output folders are not public; without it the plots are made from the
+# metrics summary in source_data/.
+cellranger_uri <- Sys.getenv("VALIDATION_CELLRANGER_URI")
 
 field_map <- c(
 	cells_recovered = "Estimated Number of Cells",
@@ -105,6 +94,15 @@ write_metric_barplot <- function(metrics_summary, metric_name, sample_colors) {
 }
 
 read_metrics_summary <- function(metrics_uri) {
+	if (!startsWith(metrics_uri, "gs://")) {
+		return(read.csv(metrics_uri, check.names = FALSE, stringsAsFactors = FALSE))
+	}
+
+	gsutil_path <- Sys.which("gsutil")
+	if (!nzchar(gsutil_path)) {
+		stop("gsutil is required to read ", metrics_uri)
+	}
+
 	metrics_text <- system2(gsutil_path, c("cat", metrics_uri), stdout = TRUE, stderr = TRUE)
 	status <- attr(metrics_text, "status")
 
@@ -125,7 +123,7 @@ read_metrics_summary <- function(metrics_uri) {
 }
 
 extract_sample_metrics <- function(sample_row) {
-	metrics_uri <- paste0(sub("/+$", "", sample_row$output_folder), "/outs/metrics_summary.csv")
+	metrics_uri <- paste0(sub("/+$", "", cellranger_uri), "/", sample_row$sample_id, "/outs/metrics_summary.csv")
 	metrics <- read_metrics_summary(metrics_uri)
 
 	if (nrow(metrics) != 1) {
@@ -144,31 +142,37 @@ extract_sample_metrics <- function(sample_row) {
 		sample_id = sample_row$sample_id,
 		sample = sample_row$sample,
 		sample_label_long = sample_row$sample_label_long,
-		metrics_uri = metrics_uri,
 		as.data.frame(metric_values, check.names = FALSE),
 		check.names = FALSE,
 		stringsAsFactors = FALSE
 	)
 }
 
-terra_metadata <- read.delim(
-	terra_metadata_path,
-	sep = "\t",
-	check.names = FALSE,
-	stringsAsFactors = FALSE
-)
+if (nzchar(cellranger_uri)) {
+	sample_table <- read.delim(
+		sample_metadata_path,
+		sep = "\t",
+		check.names = FALSE,
+		stringsAsFactors = FALSE
+	)[, c("sample_id", "sample", "sample_label_long")]
 
-sample_table <- unique(terra_metadata[, c("entity:validation_id", "sample", "sample_label_long", "output_folder")])
-names(sample_table)[names(sample_table) == "entity:validation_id"] <- "sample_id"
+	metrics_rows <- lapply(seq_len(nrow(sample_table)), function(index) {
+		extract_sample_metrics(sample_table[index, , drop = FALSE])
+	})
 
-metrics_rows <- lapply(seq_len(nrow(sample_table)), function(index) {
-	extract_sample_metrics(sample_table[index, , drop = FALSE])
-})
-
-metrics_summary <- do.call(rbind, metrics_rows)
+	metrics_summary <- do.call(rbind, metrics_rows)
+} else {
+	metrics_summary <- read.delim(
+		source_data_path,
+		sep = "\t",
+		check.names = FALSE,
+		stringsAsFactors = FALSE
+	)
+}
 
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(plot_dir, recursive = TRUE, showWarnings = FALSE)
+
 write.table(
 	metrics_summary,
 	file = output_path,

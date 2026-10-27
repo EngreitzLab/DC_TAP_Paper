@@ -1,6 +1,9 @@
 ---
 title: "compare_es"
 output: html_document
+params:
+  sceptre_dir: "analyses/2026-05-11_SCEPTRE/source_data"
+  output_dir: "results/2026-05-14_compare_low_high_es"
 ---
 
 ```{r setup, message=FALSE, warning=FALSE}
@@ -9,27 +12,31 @@ library(dplyr)
 library(tidyr)
 library(here)
 library(ggplot2)
-library(GGally)
+
+# SCEPTRE outputs: the committed copy in source_data/ or a fresh run (results/2026-06-10_SCEPTRE)
+sceptre_dir <- here(params$sceptre_dir)
+output_dir <- here(params$output_dir)
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 ```
 
-# Compare Effect Sizes Across Low vs High MOI
+# Compare Effect Sizes Across with paper
 
 ```{r load-table-s3}
-table_s3_path <- here("data/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
+manual_pairs_path <- here("metadata", "validation_30_pairs.tsv")
+manual_pairs_df <- read.csv(manual_pairs_path, sep = "\t", header=TRUE, stringsAsFactors = FALSE)
+
+table_s3_path <- here("..", "results", "formatted_dc_tap_results", "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
 table_s3 <- fread(table_s3_path, data.table = FALSE)
 
-grna_target_df <- fread(
-	here("results/2026-05-11_SCEPTRE/tables/grna_target_data_frame.tsv"),
-	data.table = FALSE
-)
-
 table_s3_wtc11 <- table_s3[table_s3$cell_type == "WTC11", ]
-tested_elements <- unique(grna_target_df$grna_target)
-table_s3_wtc11 <- table_s3_wtc11[table_s3_wtc11$intended_target_name_hg38 %in% tested_elements, ]
+table_s3_wtc11 <- table_s3_wtc11[table_s3_wtc11$element_gene_pair_identifier_hg38 %in% manual_pairs_df$element_gene_pair_identifier_hg38, ]
+# Put NA to false
+table_s3_wtc11[is.na(table_s3_wtc11$significant_wo_pos_controls_20fdr), "significant_wo_pos_controls_20fdr"] <- FALSE
 
-sig_pairs <- table_s3_wtc11[table_s3_wtc11$significant == TRUE, ]
-validation34_ids <- unique(sig_pairs$element_gene_pair_identifier_hg38)
-cat("Validation pairs (Table S3 significant):", length(validation34_ids), "\n")
+validation_pairs <- table_s3_wtc11
+validation_ids <- unique(validation_pairs$element_gene_pair_identifier_hg38)
+cat("Validation pairs:", length(validation_ids), "\n")
+cat("Validation pairs (Table S3 significant):", sum(validation_pairs$significant_wo_pos_controls_20fdr), "\n")
 ```
 
 ```{r load-sceptre-results}
@@ -43,14 +50,14 @@ union_dirs <- c(
 )
 
 sceptre_list <- lapply(union_dirs, function(dir_name) {
-	fp <- here("results/2026-05-11_SCEPTRE/runs", dir_name, "sceptre_discovery_results.tsv")
+	fp <- file.path(sceptre_dir, "runs", dir_name, "sceptre_discovery_results.tsv")
 	x <- fread(fp, data.table = FALSE)
 	x$source <- dir_name
 	x
 })
 sceptre_all <- bind_rows(sceptre_list)
 
-gencode_v32_path <- here("data/gencode.v32.primary_assembly.annotation.gtf.gz")
+gencode_v32_path <- here("data", "gencode.v32.primary_assembly.annotation.gtf.gz")
 gencode_genes <- fread(
 	cmd = paste("gzip -dc", shQuote(gencode_v32_path)),
 	sep = "\t",
@@ -81,6 +88,7 @@ sceptre_all <- merge(
 )
 
 sceptre_all$pct_change_effect_size <- 100 * (sceptre_all$fold_change - 1)
+sceptre_all$se_pct_change_effect_size <- 100 * sceptre_all$se_fold_change
 sceptre_all$element_gene_pair_identifier_hg38 <- paste(
 	sceptre_all$gene_symbol,
 	sceptre_all$grna_target,
@@ -88,133 +96,311 @@ sceptre_all$element_gene_pair_identifier_hg38 <- paste(
 )
 ```
 
-## Scatter: low_moi_merged vs high_moi_merged
+## First panel for paper
+Compare the paper with high-moi merged
 
-```{r merged-scatter}
-merged_df <- sceptre_all %>%
-	filter(source %in% c("low_moi_merged_union", "high_moi_merged_union")) %>%
-	select(
-		element_gene_pair_identifier_hg38,
-		source,
-		pct_change_effect_size,
-		significant
-	) %>%
-	mutate(significant = ifelse(is.na(significant), FALSE, significant)) %>%
-	pivot_wider(
-		names_from = source,
-		values_from = c(pct_change_effect_size, significant),
-		values_fill = list(pct_change_effect_size = NA_real_, significant = FALSE)
-	) %>%
-	filter(significant_low_moi_merged_union | significant_high_moi_merged_union) %>%
-	mutate(
-		validation_34 = ifelse(
-			element_gene_pair_identifier_hg38 %in% validation34_ids,
-			"Validation 34 pairs",
-			"Other significant pair"
-		)
-	)
+```{r}
+# Keep only relevant columns from the paper results
+paper_effects <- validation_pairs %>%
+  select(
+    element_gene_pair_identifier_hg38,
+    gene_symbol,
+    pct_change_effect_size_paper = pct_change_effect_size,
+    se_pct_change_effect_size_paper = standard_error_pct_change,
+    significant_paper = significant_wo_pos_controls_20fdr
+  )
 
+# Join with sceptre results
+plot_df <- sceptre_all %>%
+  select(
+    element_gene_pair_identifier_hg38,
+    gene_symbol,
+    source,
+    pct_change_effect_size_sceptre = pct_change_effect_size,
+    se_pct_change_effect_size_sceptre = se_pct_change_effect_size,
+    significant_sceptre = significant
+  ) %>%
+  inner_join(
+    paper_effects,
+    by = c("element_gene_pair_identifier_hg38", "gene_symbol")
+  )
+
+plot_df <- plot_df %>%
+  filter(source == "high_moi_merged_union")
+
+cor.value <- cor(plot_df$pct_change_effect_size_paper, plot_df$pct_change_effect_size_sceptre, method = "pearson")
+cor.text <- paste("r =", round(cor.value, 2))
+
+# Scatter plot with error bars
 ggplot(
-	merged_df,
-	aes(
-		x = pct_change_effect_size_low_moi_merged_union,
-		y = pct_change_effect_size_high_moi_merged_union,
-		color = validation_34
-	)
+  plot_df,
+  aes(
+    x = pct_change_effect_size_paper,
+    y = pct_change_effect_size_sceptre,
+  )
 ) +
-	geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.4, alpha = 0.5) +
-	geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.4, alpha = 0.5) +
-	geom_abline(slope = 1, intercept = 0, linetype = "dotted", linewidth = 0.5) +
-	geom_point(size = 2.4, alpha = 0.85) +
-	scale_color_manual(values = c(
-		"Validation 34 pairs" = "#c51b7d",
-		"Other significant pair" = "grey65"
-	)) +
-	theme_minimal() +
-	labs(
-		title = "Effect size comparison: low_moi_merged vs high_moi_merged",
-		x = "% change effect size (low_moi_merged)",
-		y = "% change effect size (high_moi_merged)",
-		color = NULL
-	)
+
+  # horizontal error bars
+  geom_errorbar(
+    aes(
+      xmin = pct_change_effect_size_paper - 1.96 *
+        se_pct_change_effect_size_paper,
+      xmax = pct_change_effect_size_paper + 1.96 *
+        se_pct_change_effect_size_paper
+    ),
+    orientation = "y",
+    width = 0
+  ) +
+
+  # vertical error bars
+  geom_errorbar(
+    aes(
+      ymin = pct_change_effect_size_sceptre - 1.96 *
+        se_pct_change_effect_size_sceptre,
+      ymax = pct_change_effect_size_sceptre + 1.96 *
+        se_pct_change_effect_size_sceptre
+    ),
+    width = 0
+  ) +
+
+  geom_point(alpha = 0.6, size = 0.1) +
+
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dotted",
+    color = "black"
+  ) +
+
+  ylim(-50, 10) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  
+  geom_hline(yintercept = 0, linetype = "dashed") +
+
+  annotate("text",
+           x = -Inf, y = Inf,
+           label = cor.text,
+           hjust = -0.1, vjust = 1.5,
+           size = 4, color = "red") +
+
+  theme_classic() +
+
+  labs(
+    x = "Full Screen Effect Size(%)",
+    y = "High-Moi Effect Size(%)",
+    color = "Significant",
+    title = "Effect Size Concordance"
+  ) +
+  theme(
+    aspect.ratio = 1
+  ) + coord_flip()
+ggsave(
+  filename = file.path(output_dir, "scatter_effect_size_correlation_high_vs_paper.pdf"),
+  width = 6,
+  height = 6,
+  dpi = 300
+)
 ```
 
-## GGPairs: two low-MOI and two high-MOI samples
+## Second panel for paper
+Compare validation low-moi vs with high-moi merged
 
-```{r ggpairs-plot, fig.width=10, fig.height=10}
-pair_sources <- c("MOI1_1_union", "MOI1_5_union", "MOI11_3_union", "MOI13_union")
+```{r}
+# Select sceptre results
+plot_df <- sceptre_all %>%
+  select(
+    element_gene_pair_identifier_hg38,
+    gene_symbol,
+    source,
+    pct_change_effect_size,
+    se_pct_change_effect_size,
+    significant_sceptre = significant
+  ) %>%
+  filter(source %in% c("high_moi_merged_union", "low_moi_merged_union")) %>%
+  filter(element_gene_pair_identifier_hg38 %in% validation_pairs$element_gene_pair_identifier_hg38) %>%
+  tidyr::pivot_wider(
+    id_cols = c(element_gene_pair_identifier_hg38, gene_symbol),
+    names_from = source,
+    values_from = c(
+      pct_change_effect_size,
+      se_pct_change_effect_size,
+      significant_sceptre
+    )
+  )
 
-pair_df <- sceptre_all %>%
-	filter(source %in% pair_sources) %>%
-	select(
-		element_gene_pair_identifier_hg38,
-		source,
-		pct_change_effect_size,
-		significant
-	) %>%
-	mutate(significant = ifelse(is.na(significant), FALSE, significant)) %>%
-	pivot_wider(
-		names_from = source,
-		values_from = c(pct_change_effect_size, significant),
-		values_fill = list(pct_change_effect_size = NA_real_, significant = FALSE)
-	) %>%
-	filter(
-		significant_MOI1_1_union |
-			significant_MOI1_5_union |
-			significant_MOI11_3_union |
-			significant_MOI13_union
-	) %>%
-	mutate(
-		validation_34 = ifelse(
-			element_gene_pair_identifier_hg38 %in% validation34_ids,
-			"Validation 34 pairs",
-			"Other significant pair"
-		)
-	)
-
-plot_cols <- c(
-	"pct_change_effect_size_MOI1_1_union",
-	"pct_change_effect_size_MOI1_5_union",
-	"pct_change_effect_size_MOI11_3_union",
-	"pct_change_effect_size_MOI13_union"
+cor.value <- cor(
+  plot_df$pct_change_effect_size_high_moi_merged_union,
+  plot_df$pct_change_effect_size_low_moi_merged_union,
+  method = "pearson",
+  use = "complete.obs"
 )
 
-shared_limits <- range(unlist(pair_df[, plot_cols]), na.rm = TRUE)
+cor.text <- paste("r =", round(cor.value, 2))
 
-lower_fixed_axes <- function(data, mapping, ...) {
-	ggplot(data = data, mapping = mapping) +
-		geom_point(size = 1.2, alpha = 0.8, na.rm = TRUE) +
-		geom_abline(
-			slope = 1,
-			intercept = 0,
-			linetype = "dashed",
-			color = "black",
-			linewidth = 0.4
-		) +
-		scale_x_continuous(limits = shared_limits) +
-		scale_y_continuous(limits = shared_limits) +
-		theme(
-			axis.text = element_text(size = 4),
-			axis.title = element_blank()
-		)
-}
-
-ggpairs(
-	pair_df,
-	columns = plot_cols,
-	mapping = aes(color = validation_34),
-	diag = list(continuous = wrap("densityDiag", alpha = 0.5)),
-	upper = list(continuous = wrap("cor", size = 4)),
-	lower = list(continuous = wrap(lower_fixed_axes))
+# Scatter plot with error bars
+ggplot(
+  plot_df,
+  aes(
+    x = pct_change_effect_size_high_moi_merged_union,
+    y = pct_change_effect_size_low_moi_merged_union,
+    color = significant_sceptre_high_moi_merged_union |
+      significant_sceptre_low_moi_merged_union
+  )
 ) +
-	scale_color_manual(values = c(
-		"Validation 34 pairs" = "#c51b7d",
-		"Other significant pair" = "grey65"
-	)) +
-	labs(title = "Effect size concordance across replicate low/high MOI runs") +
-	theme(
-		axis.text = element_text(size = 12),
-		axis.title = element_text(size = 12),
-	)
+  geom_errorbar(
+  aes(
+    xmin = pct_change_effect_size_high_moi_merged_union -
+      1.96 * se_pct_change_effect_size_high_moi_merged_union,
+    xmax = pct_change_effect_size_high_moi_merged_union +
+      1.96 * se_pct_change_effect_size_high_moi_merged_union
+  ),
+  orientation = "y",
+  width = 0
+  ) +
+  geom_errorbar(
+    aes(
+      ymin = pct_change_effect_size_low_moi_merged_union -
+        1.96 * se_pct_change_effect_size_low_moi_merged_union,
+      ymax = pct_change_effect_size_low_moi_merged_union +
+        1.96 * se_pct_change_effect_size_low_moi_merged_union
+    ),
+    width = 0
+  ) +
+  geom_point(alpha = 0.6, size = 0.8) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dotted") +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_cartesian(xlim = c(-50, 10), ylim = c(-50, 10)) +
+  annotate(
+    "text",
+    x = -Inf, y = Inf,
+    label = cor.text,
+    hjust = -0.1, vjust = 1.5,
+    size = 4,
+    color = "red"
+  ) +
+  scale_color_manual(values = c("TRUE" = "#d62728", "FALSE" = "grey70")) +
+  theme_classic() +
+  labs(
+    x = "Validation Screen High-MOI Effect Size (%)",
+    y = "Validation Screen Low-MOI Effect Size (%)",
+    color = "Significant",
+    title = "Effect Size Concordance"
+  ) +
+  theme(aspect.ratio = 1)
+
+ggsave( filename = file.path(output_dir, "scatter_effect_size_correlation_high_vs_low.pdf"), width = 6, height = 6, dpi = 300 )
 ```
 
+## Third panel for paper
+Compare the paper with low-moi merged
+
+```{r}
+# Keep only relevant columns from the paper results
+paper_effects <- validation_pairs %>%
+  select(
+    element_gene_pair_identifier_hg38,
+    gene_symbol,
+    pct_change_effect_size_paper = pct_change_effect_size,
+    se_pct_change_effect_size_paper = standard_error_pct_change,
+    significant_paper = significant_wo_pos_controls_20fdr
+  )
+
+# Join with sceptre results
+plot_df <- sceptre_all %>%
+  select(
+    element_gene_pair_identifier_hg38,
+    gene_symbol,
+    source,
+    pct_change_effect_size_sceptre = pct_change_effect_size,
+    se_pct_change_effect_size_sceptre = se_pct_change_effect_size,
+    significant_sceptre = significant
+  ) %>%
+  inner_join(
+    paper_effects,
+    by = c("element_gene_pair_identifier_hg38", "gene_symbol")
+  )
+
+plot_df <- plot_df %>%
+  filter(source == "low_moi_merged_union")
+
+cor.value <- cor(plot_df$pct_change_effect_size_paper, plot_df$pct_change_effect_size_sceptre, method = "pearson")
+cor.text <- paste("r =", round(cor.value, 2))
+
+# Scatter plot with error bars
+ggplot(
+  plot_df,
+  aes(
+    x = pct_change_effect_size_paper,
+    y = pct_change_effect_size_sceptre,
+    color = significant_paper | significant_sceptre
+  )
+) +
+
+  # horizontal error bars
+  geom_errorbar(
+    aes(
+      xmin = pct_change_effect_size_paper - 1.96 *
+        se_pct_change_effect_size_paper,
+      xmax = pct_change_effect_size_paper + 1.96 *
+        se_pct_change_effect_size_paper
+    ),
+    orientation = "y",
+    width = 0
+  ) +
+
+  # vertical error bars
+  geom_errorbar(
+    aes(
+      ymin = pct_change_effect_size_sceptre - 1.96 *
+        se_pct_change_effect_size_sceptre,
+      ymax = pct_change_effect_size_sceptre + 1.96 *
+        se_pct_change_effect_size_sceptre
+    ),
+    width = 0
+  ) +
+
+  geom_point(alpha = 0.6, size = 0.1) +
+
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dotted",
+    color = "black"
+  ) +
+
+  ylim(-50, 10) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  
+  geom_hline(yintercept = 0, linetype = "dashed") +
+
+  scale_color_manual(
+    values = c(
+      "TRUE" = "#d62728",
+      "FALSE" = "grey70"
+    )
+  ) +
+  annotate("text",
+           x = -Inf, y = Inf,
+           label = cor.text,
+           hjust = -0.1, vjust = 1.5,
+           size = 4, color = "red") +
+
+  theme_classic() +
+
+  labs(
+    x = "Full Screen Effect Size(%)",
+    y = "Validation Screen Low-Moi Effect Size(%)",
+    color = "Significant",
+    title = "Effect Size Concordance"
+  ) +
+  theme(
+    aspect.ratio = 1
+  )
+ggsave(
+  filename = file.path(output_dir, "scatter_effect_size_correlation_low_vs_paper.pdf"),
+  width = 6,
+  height = 6,
+  dpi = 300
+)
+```

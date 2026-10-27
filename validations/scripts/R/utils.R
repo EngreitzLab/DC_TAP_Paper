@@ -16,27 +16,26 @@ list_filtered_h5_files <- function(h5_dir) {
 	h5_files
 }
 
-load_terra_metadata <- function(terra_metadata_path, sample_ids) {
-	terra_metadata <- data.table::fread(terra_metadata_path)
-	terra_metadata[, sample_id := `entity:validation_id`]
+load_sample_metadata <- function(sample_metadata_path, sample_ids) {
+	sample_metadata <- data.table::fread(sample_metadata_path)
 
-	missing_samples <- setdiff(sample_ids, terra_metadata$sample_id)
+	missing_samples <- setdiff(sample_ids, sample_metadata$sample_id)
 	if (length(missing_samples) > 0) {
 		stop(
-			"Missing Terra metadata for sample(s): ",
+			"Missing sample metadata for sample(s): ",
 			paste(missing_samples, collapse = ", ")
 		)
 	}
 
-	if (anyDuplicated(terra_metadata$sample_id) > 0) {
-		duplicated_samples <- unique(terra_metadata$sample_id[duplicated(terra_metadata$sample_id)])
+	if (anyDuplicated(sample_metadata$sample_id) > 0) {
+		duplicated_samples <- unique(sample_metadata$sample_id[duplicated(sample_metadata$sample_id)])
 		stop(
-			"Duplicate Terra metadata rows for sample(s): ",
+			"Duplicate sample metadata rows for sample(s): ",
 			paste(duplicated_samples, collapse = ", ")
 		)
 	}
 
-	terra_metadata
+	sample_metadata
 }
 
 extract_modality_counts <- function(h5_file, modality_pattern, use_names) {
@@ -184,7 +183,7 @@ load_guide_element_map <- function(table_s3_path) {
 
 load_validation_seurat_object <- function(
 	h5_dir,
-	terra_metadata_path,
+	sample_metadata_path,
 	guide_reference_path,
 	table_s3_path,
 	table_s4_path,
@@ -193,7 +192,7 @@ load_validation_seurat_object <- function(
 ) {
 	h5_files <- list_filtered_h5_files(h5_dir)
 	sample_ids <- names(h5_files)
-	terra_metadata <- load_terra_metadata(terra_metadata_path, sample_ids)
+	sample_metadata <- load_sample_metadata(sample_metadata_path, sample_ids)
 	readout_gene_ids <- load_readout_gene_ids(table_s4_path)
 
 	template_counts <- extract_modality_counts(
@@ -245,9 +244,12 @@ load_validation_seurat_object <- function(
 			id_name = "guide_id",
 			symbol_name = "guide_symbol"
 		)
+		guide_metadata$guide_id_original <- guide_metadata$guide_id
+		guide_metadata$guide_id <- normalize_feature_names(guide_metadata$guide_id)
 
 		guide_element_map <- load_guide_element_map(table_s3_path)
 		guide_reference <- load_guide_reference(guide_reference_path)
+		guide_reference$guide_id <- normalize_feature_names(guide_reference$guide_id)
 		guide_reference_lookup <- as.data.frame(guide_reference)
 		rownames(guide_reference_lookup) <- guide_reference_lookup$guide_id
 		guide_element_lookup <- as.data.frame(guide_element_map)
@@ -264,6 +266,9 @@ load_validation_seurat_object <- function(
 			guide_metadata$guide_id,
 			"element"
 		]
+		if (sum(!is.na(guide_metadata$element)) == 0) {
+			stop("No gRNA guides could be matched to Table S3 element metadata.")
+		}
 		guide_metadata$element[is.na(guide_metadata$element)] <- "non-targeting"
 	}
 
@@ -301,7 +306,7 @@ load_validation_seurat_object <- function(
 				stop("Missing CRISPR Guide Capture assay for sample: ", sample_id)
 			}
 
-			if (!identical(rownames(grna_counts), guide_metadata$guide_id)) {
+			if (!identical(normalize_feature_names(rownames(grna_counts)), guide_metadata$guide_id)) {
 				stop("Guide ordering differs for sample: ", sample_id)
 			}
 
@@ -327,7 +332,7 @@ load_validation_seurat_object <- function(
 	cell_metadata <- data.table::rbindlist(cell_metadata_list)
 	cell_metadata <- merge(
 		cell_metadata,
-		terra_metadata,
+		sample_metadata,
 		by = "sample_id",
 		all.x = TRUE,
 		sort = FALSE

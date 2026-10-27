@@ -30,7 +30,7 @@ cat("  n_processors:", n_processors, "\n")
 ```
 
 ```{r load-object}
-output_root <- here("results", "2026-05-11_SCEPTRE")
+output_root <- here("results", "2026-06-10_SCEPTRE")
 tables_dir <- file.path(output_root, "tables")
 runs_dir <- file.path(output_root, "runs")
 merged_run_dir <- file.path(runs_dir, paste0(prefix, "_", integration_strategy))
@@ -214,7 +214,7 @@ summary_dt <- data.table(
   n_power_rows = if (!is.null(power_result)) nrow(power_result) else NA_integer_,
   n_calibration_rows = nrow(calibration_result),
   n_processors = n_processors,
-  merged_run_dir = merged_run_dir
+  merged_run_dir = file.path("results", "2026-06-10_SCEPTRE", "runs", basename(merged_run_dir))
 )
 
 data.table::fwrite(summary_dt, file.path(tables_dir, paste0("sceptre_pipeline_", prefix, "_", integration_strategy, ".tsv")), sep = "\t")

@@ -69,10 +69,9 @@ moi_level <- params$moi_level
 samples_to_merge <- params$sample_list
 prefix <- params$prefix
 
-output_root <- here("results", "2026-05-11_SCEPTRE")
+output_root <- here("results", "2026-06-10_SCEPTRE")
 objects_dir <- file.path(output_root, "objects")
 tables_dir <- file.path(output_root, "tables")
-data_dir <- here("data")
 
 dir.create(objects_dir, recursive = TRUE, showWarnings = FALSE)
 dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
@@ -86,7 +85,9 @@ cat("Samples to merge:", paste(samples_to_merge, collapse = ", "), "\n")
 ```{r}
 discovery_pairs_path <- file.path(tables_dir, "discovery_pairs_wtc11_all.tsv")
 table_s3_path <- here(
-  "data",
+  "..",
+  "results",
+  "formatted_dc_tap_results",
   "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
 )
 
@@ -105,7 +106,7 @@ cat("\nWrote", nrow(discovery_pairs), "WTC11 discovery pairs to:", discovery_pai
 
 ```{r load-seurat}
 cat("\nLoading Seurat object...\n")
-seu_path <- here("results", "qc_experiment", "combined_cdna_seurat_filtered.rds")
+seu_path <- here("results", "qc_experiment_June_2026", "combined_cdna_seurat_filtered.rds")
 seu <- readRDS(seu_path)
 
 cat("Original Seurat object:\n")
@@ -192,10 +193,108 @@ if (length(requested_cols) == 0) {
 # Keep only discovery pairs available in this merged object
 valid_response_ids <- rownames(response_matrix)
 valid_grna_targets <- unique(grna_target_df$grna_target)
+
+# Restrict discovery pairs to readout genes from RNA feature metadata
+rna_feature_meta <- as.data.table(seu_merged[["RNA"]][[]], keep.rownames = "feature_id")
+if (!("is_readout_gene" %in% colnames(rna_feature_meta))) {
+  stop("RNA feature metadata is missing is_readout_gene; cannot filter discovery pairs to readout genes.")
+}
+readout_response_ids <- unique(rna_feature_meta[is_readout_gene %in% TRUE, feature_id])
+
 discovery_pairs <- unique(discovery_pairs[
-  grna_target %in% valid_grna_targets & response_id %in% valid_response_ids,
+  grna_target %in% valid_grna_targets &
+    response_id %in% valid_response_ids &
+    response_id %in% readout_response_ids,
   .(grna_target, response_id)
 ])
+
+manual_discovery_pair_ids <- c(
+  "PCBP1|chr2:70089449-70089750",
+  "PRSS8|chr16:31130895-31131196",
+  "SLC2A3|chr12:7995234-7995535",
+  "PRSS8|chr16:31142244-31142545",
+  "PCBP1|chr2:70142017-70142318",
+  "FAM111A|chr11:59158502-59158803",
+  "SH3BGRL3|chr1:26275563-26275864",
+  "CEBPB|chr20:50192829-50193130",
+  "NDUFB7|chr19:14574208-14574509",
+  "TP53|chr17:7656987-7657288",
+  "CDC37|chr19:10390714-10391015",
+  "PIMREG|chr17:6455432-6455733",
+  "EIF4A1|chr17:7560402-7560703",
+  "SLC2A3|chr12:7960676-7960977",
+  "SLC2A3|chr12:7907152-7907453",
+  "SLC2A3|chr12:7916078-7916379",
+  "SLC2A3|chr12:7933204-7933505",
+  "SLC2A3|chr12:8018981-8019282",
+  "TP53|chr17:7632481-7632782",
+  "TP53|chr17:7632845-7633443",
+  "TP53|chr17:7676578-7676879",
+  "TP53|chr17:7707485-7707786",
+  "RPL8|chr8:144805052-144805353",
+  "CFL1|chr11:65818218-65818519",
+  "HMGA1|chr6:34196258-34196559",
+  "PCBP1|chr2:70086102-70086403",
+  "IER2|chr19:13163708-13164141",
+  "ENO2|chr12:6925491-6926215",
+  "C12orf57|chr12:6962060-6962361",
+  "PCBP1|chr2:70124973-70125470"
+)
+manual_discovery_pair_table <- unique(data.table(pair_id = manual_discovery_pair_ids))
+manual_discovery_pair_table[, c("gene_symbol", "grna_target") := tstrsplit(pair_id, "|", fixed = TRUE)]
+
+manual_pair_lookup <- unique(table_s3[
+  cell_type == "WTC11",
+  .(
+    gene_symbol,
+    grna_target = intended_target_name_hg38,
+    response_id = gene_id
+  )
+])
+manual_discovery_pairs <- merge(
+  manual_discovery_pair_table,
+  manual_pair_lookup,
+  by = c("gene_symbol", "grna_target"),
+  all.x = TRUE,
+  sort = FALSE
+)
+
+missing_manual_pairs <- manual_discovery_pairs[is.na(response_id), pair_id]
+if (length(missing_manual_pairs) > 0) {
+  stop("Manual discovery pairs missing from Table S3: ", paste(missing_manual_pairs, collapse = ", "))
+}
+
+ambiguous_manual_pairs <- manual_discovery_pairs[
+  ,
+  .(n_response_ids = data.table::uniqueN(response_id)),
+  by = .(pair_id)
+][n_response_ids > 1, pair_id]
+if (length(ambiguous_manual_pairs) > 0) {
+  stop("Manual discovery pairs map to multiple response IDs: ", paste(ambiguous_manual_pairs, collapse = ", "))
+}
+
+unavailable_manual_pairs <- manual_discovery_pairs[
+  !(grna_target %in% valid_grna_targets & response_id %in% valid_response_ids),
+  pair_id
+]
+if (length(unavailable_manual_pairs) > 0) {
+  stop("Manual discovery pairs unavailable in merged object: ", paste(unavailable_manual_pairs, collapse = ", "))
+}
+
+discovery_pairs_before_manual <- nrow(discovery_pairs)
+manual_discovery_pairs <- unique(manual_discovery_pairs[, .(grna_target, response_id)])
+discovery_pairs <- unique(rbindlist(
+  list(discovery_pairs, manual_discovery_pairs),
+  use.names = TRUE
+))
+
+cat("Manual discovery pairs requested:", length(manual_discovery_pair_ids), "\n")
+cat("Manual discovery pairs available:", nrow(manual_discovery_pairs), "\n")
+cat(
+  "Manual discovery pairs added after duplicate removal:",
+  nrow(discovery_pairs) - discovery_pairs_before_manual,
+  "\n"
+)
 
 cat("Discovery pairs available in merged object:", nrow(discovery_pairs), "\n")
 

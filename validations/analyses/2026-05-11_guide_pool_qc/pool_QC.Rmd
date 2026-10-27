@@ -10,10 +10,14 @@ library(stringr)
 library(here)
 library(knitr)
 
+# Per-read Bowtie alignments of the two plasmid pools (not in the repository). Without them, the
+# per-guide counts and mismatch summaries are read from source_data/.
 pool_files <- c(
   pool1 = here("results", "guide_pool_qc", "pool1_bowtie_out.txt"),
   pool2 = here("results", "guide_pool_qc", "pool2_bowtie_out.txt")
 )
+source_data_dir <- here("analyses", "2026-05-11_guide_pool_qc", "source_data")
+use_bowtie <- all(file.exists(pool_files))
 
 pretty_pool_name <- function(pool_name) {
   paste("Pool", sub("^pool", "", pool_name))
@@ -30,11 +34,7 @@ quantile_text <- function(guide_counts) {
   )
 }
 
-analyze_pool <- function(pool_name, bowtie_file) {
-  if (!file.exists(bowtie_file)) {
-    stop(sprintf("Missing Bowtie output for %s: %s", pool_name, bowtie_file))
-  }
-
+read_bowtie_pool <- function(bowtie_file) {
   # Bowtie1 default output columns:
   # 1 read_id
   # 2 strand
@@ -53,15 +53,37 @@ analyze_pool <- function(pool_name, bowtie_file) {
   )
 
   dt[, mismatch_desc := fifelse(is.na(mismatch_desc) | mismatch_desc == "", NA_character_, mismatch_desc)]
-
-  guide_counts <- dt[, .N, by = ref_id][order(-N)]
-  guide_counts[, rank := .I]
-  guide_counts[, frac := N / sum(N)]
-
   dt[, n_mismatch := fifelse(is.na(mismatch_desc), 0L, str_count(mismatch_desc, ",") + 1L)]
 
   mismatch_pos <- dt[!is.na(mismatch_desc), .(token = unlist(strsplit(mismatch_desc, ","))), by = read_id]
   mismatch_pos[, pos := as.integer(sub(":.*", "", token))]
+
+  list(
+    guide_counts = dt[, .N, by = ref_id],
+    mismatch_counts = dt[, .(n_reads = .N), keyby = n_mismatch],
+    mismatch_positions = mismatch_pos[, .(n_mismatches = .N), keyby = pos]
+  )
+}
+
+read_source_data_pool <- function(pool_name) {
+  guide_counts <- fread(file.path(source_data_dir, "guide_counts.tsv"))
+  guide_counts <- guide_counts[, .(ref_id = guide_id, N = get(paste0("counts_", pool_name)))][N > 0]
+
+  list(
+    guide_counts = guide_counts,
+    mismatch_counts = fread(file.path(source_data_dir, "mismatch_counts.tsv"))[pool == pool_name, .(n_mismatch, n_reads)],
+    mismatch_positions = fread(file.path(source_data_dir, "mismatch_positions.tsv"))[pool == pool_name, .(pos, n_mismatches)]
+  )
+}
+
+analyze_pool <- function(pool_name, bowtie_file) {
+  pool_data <- if (use_bowtie) read_bowtie_pool(bowtie_file) else read_source_data_pool(pool_name)
+  mismatch_counts <- pool_data$mismatch_counts
+  mismatch_positions <- pool_data$mismatch_positions
+
+  guide_counts <- pool_data$guide_counts[order(-N)]
+  guide_counts[, rank := .I]
+  guide_counts[, frac := N / sum(N)]
 
   q_values <- quantile(guide_counts$N, probs = c(0.1, 0.9), names = FALSE)
   q_ratio <- if (q_values[1] == 0) Inf else q_values[2] / q_values[1]
@@ -89,8 +111,8 @@ analyze_pool <- function(pool_name, bowtie_file) {
         y = "Read count (log10)"
       ) +
       theme_bw(),
-    mismatch_burden = ggplot(dt, aes(x = factor(n_mismatch))) +
-      geom_bar() +
+    mismatch_burden = ggplot(mismatch_counts, aes(x = factor(n_mismatch), y = n_reads)) +
+      geom_col() +
       labs(
         title = sprintf("%s: mismatch count per aligned read", pretty_pool_name(pool_name)),
         subtitle = q_text,
@@ -98,8 +120,8 @@ analyze_pool <- function(pool_name, bowtie_file) {
         y = "Number of reads"
       ) +
       theme_bw(),
-    mismatch_position = ggplot(mismatch_pos, aes(x = pos)) +
-      geom_bar() +
+    mismatch_position = ggplot(mismatch_positions, aes(x = pos, y = n_mismatches)) +
+      geom_col() +
       labs(
         title = sprintf("%s: mismatch positions", pretty_pool_name(pool_name)),
         subtitle = q_text,
@@ -120,8 +142,7 @@ analyze_pool <- function(pool_name, bowtie_file) {
 
   list(
     pool_name = pool_name,
-    bowtie_file = bowtie_file,
-    dt = dt,
+    mismatch_counts = mismatch_counts,
     guide_counts = guide_counts,
     quantiles = q_values,
     quantile_ratio = q_ratio,
@@ -156,6 +177,7 @@ guide_count_summary[is.na(counts_pool1), counts_pool1 := 0L]
 guide_count_summary[is.na(counts_pool2), counts_pool2 := 0L]
 setorder(guide_count_summary, guide_id)
 
+dir.create(here("results", "guide_pool_qc"), recursive = TRUE, showWarnings = FALSE)
 guide_count_tsv <- here("results", "guide_pool_qc", "guide_counts.tsv")
 fwrite(guide_count_summary, guide_count_tsv, sep = "\t")
 ```
@@ -187,13 +209,13 @@ for (pool_name in names(pool_results)) {
   pool_result <- pool_results[[pool_name]]
 
   cat("\n# ", pretty_pool_name(pool_name), "\n\n", sep = "")
-  cat("- Input file: `", pool_result$bowtie_file, "`\n", sep = "")
-  cat("- Aligned reads: ", nrow(pool_result$dt), "\n", sep = "")
-  cat("- Unique guides hit: ", uniqueN(pool_result$dt$ref_id), "\n", sep = "")
+  n_reads <- sum(pool_result$mismatch_counts$n_reads)
+  cat("- Aligned reads: ", n_reads, "\n", sep = "")
+  cat("- Unique guides hit: ", nrow(pool_result$guide_counts), "\n", sep = "")
   cat("- Median reads/guide: ", median(pool_result$guide_counts$N), "\n", sep = "")
   cat("- Mean reads/guide: ", mean(pool_result$guide_counts$N), "\n", sep = "")
-  cat("- Fraction perfect matches: ", mean(pool_result$dt$n_mismatch == 0), "\n", sep = "")
-  cat("- Fraction 1-mismatch: ", mean(pool_result$dt$n_mismatch == 1), "\n", sep = "")
+  cat("- Fraction perfect matches: ", sum(pool_result$mismatch_counts[n_mismatch == 0, n_reads]) / n_reads, "\n", sep = "")
+  cat("- Fraction 1-mismatch: ", sum(pool_result$mismatch_counts[n_mismatch == 1, n_reads]) / n_reads, "\n", sep = "")
   cat(
     "- Least covered guide: `",
     pool_result$least_covered$ref_id,
