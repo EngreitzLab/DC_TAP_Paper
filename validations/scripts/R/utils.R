@@ -505,3 +505,40 @@ compute_feature_percentage <- function(seu, features, assay = "RNA", layer = "co
 
 	as.numeric((feature_totals / cell_totals) * 100)
 }
+
+# Per-guide (singleton) CRISPRi effects of the original WTC11 screen at the FAM111A and CDC37 CTCF
+# elements, with guide start positions lifted from hg19 to hg38.
+load_ctcf_element_guide_effects <- function(screen_dir, chain_path) {
+	elements <- data.table::data.table(
+		response_id = c("ENSG00000166801", "ENSG00000105401"),
+		grna_target = c("chr11:58925975-58926276", "chr19:10501390-10501691"),
+		pair = c("FAM111A|chr11:59158502-59158803", "CDC37|chr19:10390714-10391015")
+	)
+
+	singleton_results <- data.table::as.data.table(
+		readRDS(file.path(screen_dir, "singleton_differential_expression", "results_run_discovery_analysis.rds"))
+	)
+	guide_effects <- merge(singleton_results, elements, by = c("response_id", "grna_target"))
+	guide_effects[, `:=`(
+		pct_change_effect_size = (fold_change - 1) * 100,
+		lower_CI_95_pct_change = (fold_change - 1.96 * se_fold_change - 1) * 100,
+		upper_CI_95_pct_change = (fold_change + 1.96 * se_fold_change - 1) * 100
+	)]
+
+	guide_targets <- data.table::fread(file.path(screen_dir, "guide_targets.tsv"))
+	guide_positions <- unique(guide_targets[, .(grna_id = name, guide_chr = chr, guide_start = start, guide_end = end)])
+	guide_effects <- merge(guide_effects, guide_positions, by = "grna_id")
+
+	chain <- rtracklayer::import.chain(chain_path)
+	lifted <- rtracklayer::liftOver(
+		GenomicRanges::GRanges(guide_effects$guide_chr, IRanges::IRanges(guide_effects$guide_start, guide_effects$guide_start)),
+		chain
+	)
+	if (!all(lengths(lifted) == 1)) {
+		stop("Some guide positions did not lift over to a single hg38 position.")
+	}
+	guide_effects[, guide_start_hg38 := GenomicRanges::start(unlist(lifted))]
+	data.table::setcolorder(guide_effects, c(names(singleton_results), "pair"))
+
+	guide_effects[]
+}

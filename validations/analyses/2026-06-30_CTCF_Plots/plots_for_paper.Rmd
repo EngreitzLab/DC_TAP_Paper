@@ -1,0 +1,206 @@
+---
+title: "CTCF ChIP-seq and per-guide effects at the FAM111A and CDC37 CTCF elements"
+output: html_document
+---
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(see)
+  library(ggplot2)
+  library(here)
+  library(data.table)
+})
+source(here("scripts", "R", "utils.R"))
+
+output_dir <- here("results", "2026-06-30_CTCF_Plots")
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+```
+
+# CTCF ChIP-seq signal
+
+```{r}
+df <- read.delim(here("analyses", "2026-06-29_CTCF_ChIP_validation", "source_data", "ctcf_signal_per_replicate.tsv"), sep = "\t")
+df
+```
+
+## FAM111A
+```{r}
+mask_fam111a <- df$locus_label == "FAM111A_peak" & df$intended_target != "CDC37"
+locus_label <- paste0("FAM111A | ", unique(df[mask_fam111a, ]$locus))
+
+plot_df <- df[mask_fam111a, ]
+
+# Targeting guides first, then the controls (empty grna_id)
+named_guides <- unique(plot_df$grna_id[plot_df$grna_id != ""])
+custom_x_order <- c(sort(named_guides), "")
+plot_df$grna_id <- factor(plot_df$grna_id, levels = custom_x_order)
+
+plot_df$intended_target <- factor(plot_df$intended_target, levels = c("FAM111A", "control"))
+
+ggplot(plot_df, aes(x = grna_id, y = mean_signal, fill = intended_target)) +
+  geom_boxplot(width = 0.3, outlier.shape = NA) +
+  geom_jitter(width = 0.05, alpha = 0.6) +
+  theme_classic() +
+  theme(
+    title = element_text(size = 8),
+    legend.position = "bottom",
+    aspect.ratio = 3/2
+  )+
+  ylim(0, 1) +
+  labs(title = locus_label, x = "gRNA ID", y = "CTCF signal (CPM)") +
+  scale_x_discrete(labels = c("Crop_3864", "Crop_3866", "Control")) +
+  scale_fill_okabeito(order = c(3, 8))
+ggsave(file.path(output_dir, "fam111a_boxplots.pdf"), width = 3, height = 4, units = "in", dpi = 300)
+```
+
+## CDC37
+```{r}
+mask_cdc37 <- df$locus_label == "CDC37_peak" & df$intended_target != "FAM111A"
+locus_label <- paste0("CDC37 | ", unique(df[mask_cdc37, ]$locus))
+
+plot_df_cdc37 <- df[mask_cdc37, ]
+
+# Give every control row (empty grna_id) the same fill label
+plot_df_cdc37$intended_target[plot_df_cdc37$grna_id == ""] <- "Control"
+
+custom_x_order <- c("WTC11_Random_Screen_Crop_7494", "WTC11_Random_Screen_Crop_7498", "")
+plot_df_cdc37$grna_id <- factor(plot_df_cdc37$grna_id, levels = custom_x_order)
+
+plot_df_cdc37$intended_target <- factor(plot_df_cdc37$intended_target, levels = c("CDC37", "Control"))
+
+ggplot(plot_df_cdc37, aes(x = grna_id, y = mean_signal, fill = intended_target)) +
+  geom_boxplot(width = 0.3, outlier.shape = NA) +
+  geom_jitter(width = 0.05, alpha = 0.6) +
+  theme_classic() +
+  theme(
+    title = element_text(size = 8),
+    legend.position = "bottom",
+    aspect.ratio = 1
+  )+
+  ylim(0, 2) +
+  labs(title = locus_label, x = "", y = "CTCF signal (CPM)") +
+  scale_x_discrete(labels = c("Crop_7494", "Crop_7498", "Control")) +
+  scale_fill_okabeito(order = c(2, 8))
+ggsave(file.path(output_dir, "cdc37_boxplots.pdf"), width = 3, height = 4, units = "in", dpi = 300)
+```
+
+# Per-guide effects in the original WTC11 screen
+
+Singleton (per-guide) SCEPTRE results of the WTC11 screen, with guide positions lifted from hg19 to hg38.
+Element windows and CTCF motifs (hg38) are in `ctcf_element_motifs_hg38.bed`.
+
+```{r}
+guides_df <- load_ctcf_element_guide_effects(
+  screen_dir = here("..", "results", "process_validation_datasets", "WTC11_DC_TAP_Seq"),
+  chain_path = here("data", "hg19ToHg38.over.chain")
+)
+
+element_motifs <- fread(
+  here("analyses", "2026-06-30_CTCF_Plots", "ctcf_element_motifs_hg38.bed"),
+  col.names = c("chr", "start", "end", "name", "score", "strand", "thick_start", "thick_end", "rgb")
+)
+bed_feature <- function(feature_name) element_motifs[name == feature_name]
+```
+
+## FAM111A
+
+```{r}
+fam111a_window <- bed_feature("FAM111A_Region_Window")
+fam111a_motif <- bed_feature("FAM111A_CTCF_Motif")
+ctcf_motif_start  <- fam111a_motif$start
+ctcf_motif_end    <- fam111a_motif$end
+ctcf_motif_summit <- (ctcf_motif_start + ctcf_motif_end) / 2 # relative 0
+
+subtitle_text_fam <- paste0("FAM111A region | Plotted window: chr11:", fam111a_window$start, "-", fam111a_window$end)
+
+plot_df_fam <- guides_df[grna_target == "chr11:58925975-58926276"]
+
+all_guides_fam <- unique(plot_df_fam$grna_id)
+color_mask_fam <- setNames(rep("black", length(all_guides_fam)), all_guides_fam)
+targets_fam <- c("WTC11_Random_Screen_Crop_3864", "WTC11_Random_Screen_Crop_3866")
+color_mask_fam[targets_fam] <- "#009E73" # Okabe-Ito bluish green
+
+ggplot(plot_df_fam, aes(x = guide_start_hg38 - ctcf_motif_summit, y = pct_change_effect_size)) +
+  annotate("rect",
+           xmin = ctcf_motif_start - ctcf_motif_summit,
+           xmax = ctcf_motif_end - ctcf_motif_summit,
+           ymin = -Inf, ymax = Inf, fill = "#D55E00", alpha = 0.15) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#D55E00", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "gray70") +
+  geom_errorbar(aes(ymin = lower_CI_95_pct_change, ymax = upper_CI_95_pct_change, color = grna_id), width = 0) +
+  geom_point(aes(color = grna_id), size = 2.5) +
+  theme_classic() +
+  scale_color_manual(
+    values = color_mask_fam,
+    breaks = targets_fam,
+    name = "Target Guides"
+  ) +
+  scale_x_continuous(
+    limits = c(-200, 200),
+    breaks = c(-200, -100, 0, 100, 200)
+  ) +
+  labs(
+    title = "Per guide effect relative to primary CTCF motif (hg38)",
+    subtitle = subtitle_text_fam,
+    x = "Distance from motif summit (bp)",
+    y = "Effect Size (% with 95% CI)"
+  ) +
+  theme(legend.position = "bottom")
+ggsave(file.path(output_dir, "fam111a_per_guide_effect_relative_hg38.pdf"), width = 7, height = 7, units = "in", dpi = 300)
+```
+
+## CDC37
+
+```{r}
+cdc37_window <- bed_feature("CDC37_Region_Window")
+cdc37_motif1 <- bed_feature("CDC37_CTCF_Motif_1")
+cdc37_motif2 <- bed_feature("CDC37_CTCF_Motif_2")
+ctcf_motif1_start  <- cdc37_motif1$start
+ctcf_motif1_end    <- cdc37_motif1$end
+ctcf_motif1_center <- (ctcf_motif1_start + ctcf_motif1_end) / 2 # relative 0
+ctcf_motif2_start  <- cdc37_motif2$start
+ctcf_motif2_end    <- cdc37_motif2$end
+ctcf_motif2_center <- (ctcf_motif2_start + ctcf_motif2_end) / 2
+
+subtitle_text <- paste0("CDC37 region | Plotted window: chr19:", cdc37_window$start, "-", cdc37_window$end)
+
+plot_df_cdc37 <- guides_df[grna_target == "chr19:10501390-10501691"]
+
+all_guides_cdc37 <- unique(plot_df_cdc37$grna_id)
+color_mask_cdc37 <- setNames(rep("black", length(all_guides_cdc37)), all_guides_cdc37)
+targets_cdc37 <- c("WTC11_Random_Screen_Crop_7494", "WTC11_Random_Screen_Crop_7498")
+color_mask_cdc37[targets_cdc37] <- okabeito_colors(2)
+
+ggplot(plot_df_cdc37, aes(x = guide_start_hg38 - ctcf_motif1_center, y = pct_change_effect_size)) +
+  annotate("rect",
+           xmin = ctcf_motif1_start - ctcf_motif1_center,
+           xmax = ctcf_motif1_end - ctcf_motif1_center,
+           ymin = -Inf, ymax = Inf, fill = "#D55E00", alpha = 0.15) +
+  annotate("rect",
+           xmin = ctcf_motif2_start - ctcf_motif1_center,
+           xmax = ctcf_motif2_end - ctcf_motif1_center,
+           ymin = -Inf, ymax = Inf, fill = "#E69F00", alpha = 0.15) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#D55E00", linewidth = 0.7) +
+  geom_vline(xintercept = ctcf_motif2_center - ctcf_motif1_center, linetype = "dashed", color = "#E69F00", linewidth = 0.7) +
+  geom_hline(yintercept = 0, linetype = "solid", color = "gray70") +
+  geom_errorbar(aes(ymin = lower_CI_95_pct_change, ymax = upper_CI_95_pct_change, color = grna_id), width = 0) +
+  geom_point(aes(color = grna_id), size = 2.5) +
+  theme_classic() +
+  scale_color_manual(
+    values = color_mask_cdc37,
+    breaks = targets_cdc37,
+    name = "Target Guides"
+  ) +
+  scale_x_continuous(
+    limits = c(-200, 200),
+    breaks = c(-200, -100, 0, 100, 200)
+  ) +
+  labs(
+    title = "Per guide effect relative to primary CTCF motif (hg38)",
+    subtitle = subtitle_text,
+    x = "Distance from primary motif center (bp)",
+    y = "Effect Size (% with 95% CI)"
+  ) +
+  theme(legend.position = "bottom")
+ggsave(file.path(output_dir, "cdc37_per_guide_effect_relative_hg38.pdf"), width = 7, height = 7, units = "in", dpi = 300)
+```
