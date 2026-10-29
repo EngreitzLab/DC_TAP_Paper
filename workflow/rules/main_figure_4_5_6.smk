@@ -135,3 +135,17 @@ rule main_figure_2d_validation_vs_screen:
     log=$(pwd)/{log}
     cd validations && Rscript --vanilla -e "rmarkdown::render('analyses/2026-05-14_compare_low_high_es/compare_es.Rmd', output_dir = 'results/2026-05-14_compare_low_high_es', knit_root_dir = getwd())" > $log 2>&1
     """
+
+# Figure 1e: UMI saturation of DC-TAP-seq vs scRNA-seq with guide capture (J. Ray's read-downsampling tables)
+rule main_figure_1e_umi_saturation:
+  input:
+    script = "workflow/scripts/main_figure_1_and_2/plot_umi_saturation_dctap_vs_scrna.R",
+    dc_tap = "resources/main_figure_1_and_2/umi_saturation_dctap_vs_scrna/complexity_df_dctap_moi3.csv",
+    scrna = "resources/main_figure_1_and_2/umi_saturation_dctap_vs_scrna/complexity_df_smaller_scrna_w_guide.csv"
+  output:
+    "results/main_figure_1_and_2/umi_saturation_dctap_vs_scrna/fig1e_umi_saturation.pdf"
+  log: "results/main_figure_1_and_2/logs/main_figure_1e_umi_saturation.log"
+  params:
+    input_dir = "resources/main_figure_1_and_2/umi_saturation_dctap_vs_scrna"
+  shell:
+    "Rscript {input.script} {params.input_dir} {output} > {log} 2>&1"
