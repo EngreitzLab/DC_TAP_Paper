@@ -20,7 +20,7 @@ source(here("scripts", "R", "utils.R"))
 Load the rds file containing the merged Seurat object created by `combine_h5_counts.Rmd`.
 
 ```{r}
-seu <- readRDS(here("results", "qc_experiment", "combined_cdna_seurat.rds"))
+seu <- readRDS(here("results", "qc_experiment_June_2026", "combined_cdna_seurat.rds"))
 seu
 ```
 
@@ -28,7 +28,7 @@ seu
 
 ```{r}
 # Load guide counts from the pool QC
-guide_counts_path <- here("results", "guide_pool_qc", "guide_counts.tsv")
+guide_counts_path <- here("analyses", "2026-05-11_guide_pool_qc", "source_data", "guide_counts.tsv")
 guide_counts_qc <- fread(guide_counts_path)
 # Normalize guide IDs (convert underscores to hyphens to match Seurat normalization)
 guides_in_qc <- unique(gsub("_", "-", guide_counts_qc$guide_id, fixed = TRUE))
@@ -113,7 +113,6 @@ plot_knee_by_sample(
   sample_col = "sample",
   label_col = "sample"
 )
-
 ```
 
 ## Compute QC metrics
@@ -121,7 +120,7 @@ plot_knee_by_sample(
 ```{r}
 rna_feature_metadata <- seu[["RNA"]][[]]
 gtf_path <- here("data", "gencode.v32.primary_assembly.annotation.gtf.gz")
-gene_type_cache_path <- here("results", "qc_experiment", "gencode_v32_gene_types.tsv")
+gene_type_cache_path <- here("results", "qc_experiment_June_2026", "gencode_v32_gene_types.tsv")
 
 gene_types <- fetch_gene_types_from_gtf(
   gene_ids = rna_feature_metadata$gene_id,
@@ -193,7 +192,6 @@ p <- plot_hist_with_group_medians(
 p
 ```
 
-
 ```{r}
 p <- plot_hist_with_group_medians(
   df = seu@meta.data,
@@ -216,10 +214,8 @@ p <- plot_hist_with_group_medians(
 p
 ```
 
-
-
 ```{r}
-VlnPlot(seu, features = c("percent.mt", "percent.ribo", "percent.targeted", "percent.protein_coding", "nCounts"), group.by = "sample", ncol = 2) + 
+VlnPlot(seu, features = c("percent.mt", "percent.ribo", "percent.targeted", "percent.protein_coding"), group.by = "sample", ncol = 2) + 
   theme(legend.position = "none")
 ```
 
@@ -230,48 +226,73 @@ VlnPlot(seu, features = c("nCount_RNA", "nCount_gRNA", "nFeature_RNA", "nFeature
 
 ```{r}
 FeatureScatter(seu, feature1 = "nCount_RNA", feature2 = "nFeature_RNA") + 
-  geom_hline(yintercept = 10, linetype = "dashed", color = "red") +
-  geom_vline(xintercept = 500, linetype = "dashed", color = "blue") +
-  labs(title = "nCount_RNA vs percent.mt")
+  labs(title = "nCount_RNA vs nFeature_RNA")
 ```
-
 
 # Compare with scRNA
 
 ```{r}
-# scRNA mean UMI counts
+# Reference: per-gene mean UMIs of an internal 10x 5' scRNA-seq dataset (not public). Without
+# it, the per-gene comparison table in source_data/ is plotted.
 scrna_5prime_fnp <- here("data", "D0_10x5prime_pilot_counts_summary_ribo15_mt15_umi2000.tsv")
-scrna_5prime <- fread(scrna_5prime_fnp)
+comparison_source_path <- here("analyses", "2026-05-11_qc_experiment", "source_data", "gene_umi_comparison_quadrants.tsv")
 
-output_dir <- here("results", "qc_experiment")
+output_dir <- here("results", "qc_experiment_June_2026")
 dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
-
-counts_umi_mat <- GetAssayData(seu, assay = "RNA", layer = "counts")
-rna_feature_metadata <- as.data.table(seu[["RNA"]][[]], keep.rownames = "feature_id")
-
-mean_umi_df <- data.table(
-  feature_id = rownames(counts_umi_mat),
-  mean_umi_validation = Matrix::rowMeans(counts_umi_mat)
-)
-mean_umi_df <- merge(
-  mean_umi_df,
-  rna_feature_metadata[, .(feature_id, gene_symbol, ensembl_id = gene_id, is_readout_gene)],
-  by = "feature_id",
-  all.x = TRUE,
-  sort = FALSE
-)
-
-reference_umi <- copy(scrna_5prime)
-umi_comparison_df <- merge(
-  mean_umi_df[is_readout_gene %in% TRUE],
-  reference_umi[, .(ensembl_id, mean_umi_reference = mean_umi, mean_upm)],
-  by = "ensembl_id",
-  all.x = TRUE,
-  sort = FALSE
-)
 
 x_thresh <- 30
 y_thresh <- 1
+
+if (file.exists(scrna_5prime_fnp)) {
+  scrna_5prime <- fread(scrna_5prime_fnp)
+
+  counts_umi_mat <- GetAssayData(seu, assay = "RNA", layer = "counts")
+  rna_feature_metadata <- as.data.table(seu[["RNA"]][[]], keep.rownames = "feature_id")
+
+  mean_umi_df <- data.table(
+    feature_id = rownames(counts_umi_mat),
+    mean_umi_validation = Matrix::rowMeans(counts_umi_mat)
+  )
+  mean_umi_df <- merge(
+    mean_umi_df,
+    rna_feature_metadata[, .(feature_id, gene_symbol, ensembl_id = gene_id, is_readout_gene)],
+    by = "feature_id",
+    all.x = TRUE,
+    sort = FALSE
+  )
+
+  reference_umi <- copy(scrna_5prime)
+  umi_comparison_df <- merge(
+    mean_umi_df[is_readout_gene %in% TRUE],
+    reference_umi[, .(ensembl_id, mean_umi_reference = mean_umi, mean_upm)],
+    by = "ensembl_id",
+    all.x = TRUE,
+    sort = FALSE
+  )
+
+  # Load Table S3 and identify significant genes for WTC11
+  table_s3_path <- here("..", "results", "formatted_dc_tap_results", "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
+  table_s3 <- fread(table_s3_path)
+
+  # Get the unique elements (gRNA targets) present in the Seurat object
+  grna_elements <- unique(seu[["gRNA"]][[]]$element)
+  grna_elements <- grna_elements[!is.na(grna_elements) & nzchar(grna_elements)]
+
+  # Filter for WTC11 cell line with significant == TRUE AND element in the gRNA assay
+  wtc11_significant_genes <- unique(
+    table_s3[
+      cell_type == "WTC11" & 
+      significant == TRUE & 
+      intended_target_name_hg38 %in% grna_elements,
+      gene_id
+    ]
+  )
+
+  # Mark genes as significant in the comparison dataframe
+  umi_comparison_df[, is_significant := ensembl_id %in% wtc11_significant_genes]
+} else {
+  umi_comparison_df <- fread(comparison_source_path)
+}
 
 umi_comparison_df[, mean_upm_plot := fifelse(is.na(mean_upm) | mean_upm <= 0, 0.01, mean_upm)]
 umi_comparison_df[, mean_umi_validation_plot := fifelse(
@@ -292,27 +313,6 @@ umi_comparison_df[, quadrant := fifelse(
     )
   )
 )]
-
-# Load Table S3 and identify significant genes for WTC11
-table_s3_path <- here("data", "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
-table_s3 <- fread(table_s3_path)
-
-# Get the unique elements (gRNA targets) present in the Seurat object
-grna_elements <- unique(seu[["gRNA"]][[]]$element)
-grna_elements <- grna_elements[!is.na(grna_elements) & nzchar(grna_elements)]
-
-# Filter for WTC11 cell line with significant == TRUE AND element in the gRNA assay
-wtc11_significant_genes <- unique(
-  table_s3[
-    cell_type == "WTC11" & 
-    significant == TRUE & 
-    intended_target_name_hg38 %in% grna_elements,
-    gene_id
-  ]
-)
-
-# Mark genes as significant in the comparison dataframe
-umi_comparison_df[, is_significant := ensembl_id %in% wtc11_significant_genes]
 
 # Split quadrant counts by significance for on-plot labels.
 quad_counts <- umi_comparison_df[
@@ -409,7 +409,8 @@ fwrite(
     mean_umi_validation,
     mean_umi_reference,
     mean_upm,
-    quadrant
+    quadrant,
+    is_significant
   )],
   file = file.path(output_dir, "gene_umi_comparison_quadrants.tsv"),
   sep = "\t"
@@ -420,7 +421,6 @@ fwrite(
 
 ```{r}
 saveRDS(seu,file.path(output_dir, "combined_cdna_seurat_filtered.rds"))
-
 ```
 
 

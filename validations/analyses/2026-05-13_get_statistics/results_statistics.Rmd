@@ -1,8 +1,19 @@
 ---
 title: "Results statistics"
 output: html_document
+params:
+  sceptre_dir: "analyses/2026-05-11_SCEPTRE/source_data"
+  output_dir: "results/2026-05-13_get_statistics"
 ---
 
+<style>
+.main-container {
+  max-width: 1500px !important;
+}
+img.heatmap-fullsize {
+  max-width: none !important;
+}
+</style>
 
 ```{r}
 library(data.table)
@@ -11,6 +22,11 @@ library(tidyr)
 library(here)
 library(ggplot2)
 library(pheatmap)
+
+# SCEPTRE outputs: the committed copy in source_data/ or a fresh run (results/2026-06-10_SCEPTRE)
+sceptre_dir <- here(params$sceptre_dir)
+output_dir <- here(params$output_dir)
+dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
 ```
 
 
@@ -20,7 +36,7 @@ library(pheatmap)
 
 ```{r}
 # Load gRNA target data frame
-grna_target_df <- fread(here("results/2026-05-11_SCEPTRE/tables/grna_target_data_frame.tsv"), data.table=FALSE)
+grna_target_df <- fread(file.path(sceptre_dir, "tables", "grna_target_data_frame.tsv"), data.table=FALSE)
 num_tested_guides <- nrow(grna_target_df)
 num_tested_elements <- length(unique(grna_target_df$grna_target))
 num_nt_guides <- sum(grna_target_df$grna_target == "non-targeting")
@@ -29,25 +45,35 @@ message("Number of non-targeting guides: ", num_nt_guides)
 message("Number of tested elements: ", num_tested_elements - 1) # Because it includes non-targeting as element
 ```
 
+## Load the manual pairs annotations
+```{r}
+manual_pairs_path <- here("metadata", "validation_30_pairs.tsv")
+manual_pairs_df <- read.csv(manual_pairs_path, sep = "\t", header=TRUE, stringsAsFactors = FALSE)
+manual_pairs_df
+```
+
+
 ## Loading paper results
 
 ```{r}
-table_s3_path <- here("data/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
+table_s3_path <- here("..", "results", "formatted_dc_tap_results", "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv")
 table_s3 <- fread(table_s3_path, data.table=FALSE)
 # Filter to WTC11 only (matching analysis)
 table_s3_wtc11 <- table_s3[table_s3$cell_type == "WTC11", ]
 # Filter to match only the elements in gRNA mapping
-tested_elements <- unique(grna_target_df$grna_target)
-table_s3_wtc11 <- table_s3_wtc11[table_s3_wtc11$intended_target_name_hg38 %in% tested_elements, ]
-number_of_pairs_tested <- dim(table_s3_wtc11)[1]
-message("Number of pairs in validation experiment: ", number_of_pairs_tested)
+table_s3_wtc11 <- table_s3_wtc11[table_s3_wtc11$element_gene_pair_identifier_hg38 %in% manual_pairs_df$element_gene_pair_identifier_hg38, ]
+table_s3_wtc11[is.na(table_s3_wtc11$significant_wo_pos_controls_20fdr), "significant_wo_pos_controls_20fdr"] <- FALSE
+validation_pairs <- table_s3_wtc11
+validation_ids <- unique(validation_pairs$element_gene_pair_identifier_hg38)
+cat("Validation pairs:", length(validation_ids), "\n")
+
 ```
 
 # Significant pairs
 
 ```{r}
-cat("Significant pairs:\n")
-sig_pairs <- table_s3_wtc11[table_s3_wtc11$significant == TRUE, ]
+cat("Validation pairs (Table S3 significant):", sum(validation_pairs$significant_wo_pos_controls_20fdr), "\n")
+sig_pairs <- table_s3_wtc11[table_s3_wtc11$significant_wo_pos_controls_20fdr == TRUE, ]
 cat("  ", nrow(sig_pairs), " (", round(100*nrow(sig_pairs)/nrow(table_s3_wtc11), 2), "% )\n\n")
 ```
 
@@ -55,9 +81,9 @@ cat("  ", nrow(sig_pairs), " (", round(100*nrow(sig_pairs)/nrow(table_s3_wtc11),
 # Breakdown by element category if available
 
 ```{r}
-# Replace NA with "Other"
-table_s3_wtc11$element_category[is.na(table_s3_wtc11$element_category)] <- "Other"
-sig_pairs$element_category[is.na(sig_pairs$element_category)] <- "Other"
+# Elements without a chromatin category are grouped with High H3K27ac
+table_s3_wtc11$element_category[is.na(table_s3_wtc11$element_category)] <- "High H3K27ac"
+sig_pairs$element_category[is.na(sig_pairs$element_category)] <- "High H3K27ac"
 
 cat("Pairs by element category (All):\n")
 print(table(table_s3_wtc11$element_category))
@@ -188,7 +214,7 @@ union_dirs <- c("MOI1_1_union", "MOI1_5_union", "MOI11_3_union", "MOI13_union",
 sceptre_results_list <- list()
 
 for (dir_name in union_dirs) {
-  results_path <- here("results/2026-05-11_SCEPTRE/runs", dir_name, "sceptre_discovery_results.tsv")
+  results_path <- file.path(sceptre_dir, "runs", dir_name, "sceptre_discovery_results.tsv")
   if (file.exists(results_path)) {
     sceptre_results <- fread(results_path, data.table=FALSE)
     sceptre_results$source <- dir_name
@@ -204,10 +230,9 @@ sceptre_results_all <- do.call(rbind, sceptre_results_list)
 rownames(sceptre_results_all) <- NULL
 sceptre_results_all$pct_change_effect_size <- 100 * (sceptre_results_all$fold_change - 1)
 sceptre_results_all$se_change_effect_size <- 100 * sceptre_results_all$se_fold_change
-sceptre_results_all$fdr <- p.adjust(sceptre_results_all$p_value, method="fdr")
 
 # Add gene symbols from GENCODE v32 using ENSG response IDs
-gencode_v32_path <- here("data/gencode.v32.primary_assembly.annotation.gtf.gz")
+gencode_v32_path <- here("data", "gencode.v32.primary_assembly.annotation.gtf.gz")
 gencode_genes <- fread(
   cmd = paste("gzip -dc", shQuote(gencode_v32_path)),
   sep = "\t",
@@ -259,38 +284,12 @@ plot_df <- merge(
   all.x = TRUE,
   sort = FALSE
 )
-
-
-plot_df_counts <- plot_df %>%
-  mutate(
-    significant = case_when(
-      is.na(significant) ~ "Not tested",
-      significant ~ "Significant",
-      TRUE ~ "Not significant"
-    ),
-    significant = factor(
-      significant,
-      levels = c("Not significant", "Significant", "Not tested")
-    )
-  ) %>%
-  count(source, element_category, significant, name = "n")
-
-
-ggplot(plot_df_counts,
-       aes(x = element_category, y = n, fill = significant)) +
-  geom_col(position = "dodge", color = "black") +
-  facet_wrap(~ source, ncol=2) +
-  theme_minimal() +
-  labs(
-    title = "DC-TAP paper results validation",
-    x = "Element Category",
-    y = "Number of pairs",
-    fill = NULL
-  )
+plot_df
 ```
 
+## Other stats
 
-```{r height=12}
+```{r height=15}
 source_order <- c(
   "MOI1_1_union",
   "MOI1_5_union",
@@ -305,11 +304,10 @@ category_order <- c(
   "H3K27ac",
   "No H3K27ac",
   "CTCF element",
-  "H3K27me3 element",
-  "Other"
+  "H3K27me3 element"
 )
 
-color_values <- c("#c5373d", "#d9694a", "#c5cad7", "#49bcbc", "#429130", "grey80")
+color_values <- c("#c5373d", "#d9694a", "#c5cad7", "#49bcbc", "#429130")
 color_map <- setNames(color_values, category_order)
 
 tile_df <- plot_df %>%
@@ -381,142 +379,241 @@ ggplot(tile_df,
   ) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
+    axis.text.y = element_text(size=5),
     legend.title = element_blank()
   )
 
+
+```
+
+```{r}
+tile_df %>%
+  filter(!significant) %>%
+  count(element_gene_pair_identifier_hg38, sort = TRUE, name = "n")
 ```
 
 # Pheatmap of pair significance across union runs
 
-```{r}
-source_order_heat <- c(
-  "MOI1_1_union",
-  "MOI1_5_union",
-  "low_moi_merged_union",
-  "MOI11_3_union",
-  "MOI13_union",
-  "high_moi_merged_union"
+```{r fig.width=16, fig.height=11, out.extra='class="heatmap-fullsize"'}
+source_order_heat <- c("low_moi_merged_union")
+source_labels_heat <- c(
+  low_moi_merged_union = "low_merged"
 )
 
-power_cols <- c(
-  "power_at_effect_size_2_wo_pos_controls_20fdr",
-  "power_at_effect_size_3_wo_pos_controls_20fdr",
-  "power_at_effect_size_5_wo_pos_controls_20fdr",
-  "power_at_effect_size_10_wo_pos_controls_20fdr",
-  "power_at_effect_size_15_wo_pos_controls_20fdr",
-  "power_at_effect_size_20_wo_pos_controls_20fdr",
-  "power_at_effect_size_25_wo_pos_controls_20fdr",
-  "power_at_effect_size_50_wo_pos_controls_20fdr"
+manual_pair_annotations <- manual_pairs_df
+manual_annotation_cols <- c(
+  "element_gene_pair_identifier_hg38",
+  "is_significant"
 )
+if (!all(manual_annotation_cols %in% colnames(manual_pair_annotations))) {
+  stop(
+    "Manual pair annotation file is missing required columns: ",
+    paste(setdiff(manual_annotation_cols, colnames(manual_pair_annotations)), collapse = ", ")
+  )
+}
 
-power_col_labels <- c(
-  "power_es_2",
-  "power_es_3",
-  "power_es_5",
-  "power_es_10",
-  "power_es_15",
-  "power_es_20",
-  "power_es_25",
-  "power_es_50"
-)
-
-power_ann <- table_s3_wtc11 %>%
-  select(element_gene_pair_identifier_hg38, all_of(power_cols)) %>%
+manual_pair_annotations <- manual_pair_annotations %>%
+  select(all_of(manual_annotation_cols)) %>%
   distinct() %>%
   mutate(
-    across(
-      all_of(power_cols),
-      ~ case_when(
-        is.na(.) ~ "NA",
-        . < 0.5 ~ "<0.5",
-        . < 0.8 ~ "0.5-0.8",
-        TRUE ~ ">=0.8"
-      )
-    )
-  ) %>%
-  mutate(across(all_of(power_cols), ~ factor(., levels = c("<0.5", "0.5-0.8", ">=0.8", "NA"))))
+    is_significant = as.logical(is_significant)
+  )
 
-heat_df <- plot_df %>%
+manual_annotation_duplicates <- manual_pair_annotations %>%
+  count(element_gene_pair_identifier_hg38, name = "n") %>%
+  filter(n > 1)
+if (nrow(manual_annotation_duplicates) > 0) {
+  stop(
+    "Manual pair annotation file contains conflicting duplicate pair IDs: ",
+    paste(manual_annotation_duplicates$element_gene_pair_identifier_hg38, collapse = ", ")
+  )
+}
+
+sceptre_heat_df <- sceptre_results_all %>%
   mutate(
     significant = ifelse(is.na(significant), 0L, as.integer(significant)),
     source = factor(source, levels = source_order_heat)
   ) %>%
+  filter(!is.na(source)) %>%
   select(element_gene_pair_identifier_hg38, source, significant) %>%
-  distinct() %>%
-  complete(
+  group_by(element_gene_pair_identifier_hg38, source) %>%
+  summarise(significant = as.integer(any(significant == 1L)), .groups = "drop")
+
+pair_metadata <- table_s3_wtc11 %>%
+  select(
     element_gene_pair_identifier_hg38,
-    source = factor(source_order_heat, levels = source_order_heat),
-    fill = list(significant = 0L)
+    element_category,
+    pct_change_effect_size
   ) %>%
-  pivot_wider(names_from = source, values_from = significant)
-
-heat_mat <- as.matrix(heat_df[, -1])
-rownames(heat_mat) <- heat_df$element_gene_pair_identifier_hg38
-
-row_anno <- plot_df %>%
-  distinct(element_gene_pair_identifier_hg38, element_category, pct_change_effect_size.y) %>%
-  left_join(
-    power_ann,
-    by = c("element_gene_pair_identifier_hg38" = "element_gene_pair_identifier_hg38")
-  ) %>%
-  mutate(
-    element_category = ifelse(is.na(element_category), "Other", element_category),
-    element_category = factor(element_category, levels = category_order),
-    pct_change_effect_size = as.numeric(pct_change_effect_size.y)
+  group_by(element_gene_pair_identifier_hg38) %>%
+  summarise(
+    element_category = first(element_category),
+    pct_change_effect_size = first(pct_change_effect_size),
+    .groups = "drop"
   )
 
-row_order <- row_anno %>%
-  arrange(element_category, desc(pct_change_effect_size), element_gene_pair_identifier_hg38) %>%
-  pull(element_gene_pair_identifier_hg38)
+discovery_sig_status <- sceptre_heat_df %>%
+  group_by(element_gene_pair_identifier_hg38) %>%
+  summarise(
+    has_significant_discovery_result = any(significant == 1L),
+    .groups = "drop"
+  )
 
-row_anno_df <- as.data.frame(row_anno)
-rownames(row_anno_df) <- row_anno_df$element_gene_pair_identifier_hg38
-row_anno_df <- row_anno_df[row_order, c("element_category", "pct_change_effect_size", power_cols)]
-colnames(row_anno_df) <- c("element_category", "pct_change_effect_size", power_col_labels)
+make_pair_annotation <- function(pair_ids, preserve_pair_order = FALSE) {
+  pair_order_df <- data.frame(
+    element_gene_pair_identifier_hg38 = unique(pair_ids),
+    pair_input_order = seq_along(unique(pair_ids))
+  )
 
-heat_mat <- heat_mat[row_order, source_order_heat, drop = FALSE]
+  row_anno <- pair_order_df %>%
+    left_join(pair_metadata, by = "element_gene_pair_identifier_hg38") %>%
+    left_join(manual_pair_annotations, by = "element_gene_pair_identifier_hg38") %>%
+    left_join(discovery_sig_status, by = "element_gene_pair_identifier_hg38") %>%
+    mutate(
+      element_category = ifelse(is.na(element_category), "Other", element_category),
+      element_category = factor(element_category, levels = category_order),
+      pct_change_effect_size = as.numeric(pct_change_effect_size),
+      has_significant_discovery_result = coalesce(has_significant_discovery_result, FALSE),
+      is_in_manual_pair_annotations = !is.na(is_significant),
+      is_significant = case_when(
+        is.na(is_significant) ~ "Not in manual list",
+        is_significant ~ "TRUE",
+        TRUE ~ "FALSE"
+      ),
+      is_significant = factor(
+        is_significant,
+        levels = c("TRUE", "FALSE", "Not in manual list")
+      )
+    )
 
-col_anno <- data.frame(
-  MOI = c("Low MOI", "Low MOI", "Low MOI", "High MOI", "High MOI", "High MOI"),
-  row.names = source_order_heat
-)
+  if (preserve_pair_order) {
+    row_anno <- row_anno %>% arrange(pair_input_order)
+  } else {
+    row_anno <- row_anno %>%
+      arrange(element_category, desc(pct_change_effect_size), element_gene_pair_identifier_hg38)
+  }
 
-power_bin_colors <- c(
-  "<0.5" = "#d73027",
-  "0.5-0.8" = "#fdae61",
-  ">=0.8" = "#1a9850",
-  "NA" = "grey90"
+  row_anno_df <- as.data.frame(row_anno)
+  rownames(row_anno_df) <- row_anno_df$element_gene_pair_identifier_hg38
+  row_anno_df[
+    ,
+    c(
+      "element_category",
+      "pct_change_effect_size",
+      "is_significant"
+    )
+  ]
+}
+
+make_pair_heat_mat <- function(pair_ids, row_order) {
+  heat_df <- sceptre_heat_df %>%
+    filter(element_gene_pair_identifier_hg38 %in% pair_ids) %>%
+    complete(
+      element_gene_pair_identifier_hg38 = unique(pair_ids),
+      source = factor(source_order_heat, levels = source_order_heat),
+      fill = list(significant = 0L)
+    ) %>%
+    pivot_wider(names_from = source, values_from = significant)
+
+  heat_mat <- as.matrix(heat_df[, source_order_heat])
+  rownames(heat_mat) <- heat_df$element_gene_pair_identifier_hg38
+  heat_mat[row_order, source_order_heat, drop = FALSE]
+}
+
+plot_pair_heatmap <- function(heat_mat, row_anno_df, title, outfile = NULL, width = NULL, height = NULL) {
+  plot_heat_mat <- heat_mat
+  colnames(plot_heat_mat) <- unname(source_labels_heat[colnames(plot_heat_mat)])
+
+  plot_row_anno_df <- row_anno_df
+  colnames(plot_row_anno_df) <- c(
+    "category",
+    "pct_change",
+    "manual_sig"
+  )
+
+  # pheatmap's own width/height (inches) control the saved `filename` output;
+  # the chunk's fig.width/fig.height only affect the inline render.
+  max_rowname_chars <- max(nchar(rownames(plot_heat_mat)))
+  if (is.null(width)) {
+    width <- 4 + ncol(plot_heat_mat) * (44 / 72) + max_rowname_chars * 0.09
+  }
+  if (is.null(height)) {
+    height <- 2 + nrow(plot_heat_mat) * (14 / 72)
+  }
+
+  pheatmap(
+    mat = plot_heat_mat,
+    color = c("#d95f02", "darkgreen"),
+    breaks = c(-0.01, 0.5, 1.01),
+    legend_breaks = c(0, 1),
+    legend_labels = c("Not significant", "Significant"),
+    cluster_rows = FALSE,
+    cluster_cols = FALSE,
+    show_rownames = TRUE,
+    fontsize = 11,
+    fontsize_row = 8,
+    fontsize_col = 10,
+    cellwidth = 44,
+    cellheight = 14,
+    angle_col = 45,
+    annotation_row = plot_row_anno_df,
+    annotation_col = NA,
+    annotation_colors = annotation_colors,
+    annotation_legend = TRUE,
+    main = title,
+    filename = outfile,
+    width = width,
+    height = height
+  )
+}
+
+validation_pair_ids <- unique(plot_df$element_gene_pair_identifier_hg38)
+row_anno_df <- make_pair_annotation(validation_pair_ids)
+heat_mat <- make_pair_heat_mat(validation_pair_ids, rownames(row_anno_df))
+
+manual_pair_ids <- manual_pair_annotations$element_gene_pair_identifier_hg38
+manual_row_anno_df <- make_pair_annotation(manual_pair_ids)
+manual_heat_mat <- make_pair_heat_mat(manual_pair_ids, rownames(manual_row_anno_df))
+
+cat("Manual-list heatmap pairs:", nrow(manual_heat_mat), "\n")
+
+
+val_min <- min(manual_row_anno_df$pct_change_effect_size)
+val_max <- max(manual_row_anno_df$pct_change_effect_size)
+
+total_range <- val_max - val_min
+prop_neg <- abs(val_min) / total_range
+prop_pos <- val_max / total_range
+
+n_neg <- round(10 * prop_neg)
+n_pos <- 10 - n_neg
+
+pct_custom_palette <- c(
+  colorRampPalette(c("#2166ac", "white"))(n_neg),
+  colorRampPalette(c("white", "#b2182b"))(n_pos)[-1]
 )
 
 annotation_colors <- list(
-  element_category = color_map,
-  MOI = c("Low MOI" = "#4E79A7", "High MOI" = "#F28E2B"),
-  pct_change_effect_size = colorRampPalette(c("#2166ac", "white", "#b2182b"))(100)
+  category = color_map,
+  pct_change = pct_custom_palette,
+  manual_sig = c(
+    "TRUE" = "#1b9e77",
+    "FALSE" = "#d95f02"
+  )
 )
-for (pc in power_col_labels) {
-  annotation_colors[[pc]] <- power_bin_colors
-}
 
-pheatmap(
-  mat = heat_mat,
-  color = c("white", "black"),
-  breaks = c(-0.01, 0.5, 1.01),
-  legend_breaks = c(0, 1),
-  legend_labels = c("Not significant", "Significant"),
-  cluster_rows = FALSE,
-  cluster_cols = FALSE,
-  show_rownames = FALSE,
-  annotation_row = row_anno_df,
-  annotation_col = col_anno,
-  annotation_colors = annotation_colors,
-  annotation_legend = TRUE,
-  main = "Validation pairs across union analyses (significant = black)"
+
+plot_pair_heatmap(
+  heat_mat = manual_heat_mat,
+  row_anno_df = manual_row_anno_df,
+  title = "Validation experiments: 30 pairs",
+  outfile = file.path(output_dir, "manual_pairs_low_moi_heatmap.pdf")
 )
 ```
 
 # Summary statistics for validation
 
-## Percentage of pairs significant in each sample (out of 34)
+## Percentage of pairs significant in each sample
 
 ```{r}
 # Set display labels for samples
@@ -545,7 +642,7 @@ summary_sig_per_sample <- data.frame(
   Percent_Significant = round(percent_sig_per_sample, 1)
 )
 summary_sig_per_sample <- summary_sig_per_sample[order(summary_sig_per_sample$Sample), ]
-knitr::kable(summary_sig_per_sample, caption = "Significant pairs per sample (out of 34)")
+knitr::kable(summary_sig_per_sample, caption = paste0("Significant pairs per sample (out of ", num_pairs, ")"))
 ```
 
 ## Percentage of pairs per element_category validated in each sample
@@ -645,6 +742,3 @@ category_once_stats <- lapply(unique(row_anno_df$element_category), function(cat
 category_once_stats_df <- do.call(rbind, category_once_stats)
 knitr::kable(category_once_stats_df, caption = "Pairs per element_category validated at least once across all samples")
 ```
-
-
-

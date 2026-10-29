@@ -2,67 +2,39 @@
 
 ## Purpose
 
-This analysis note documents the guide-pool QC workflow used to align MiSeq reads to the guide reference and summarize alignment quality.
+Checks the uniformity of the sgRNA plasmid pools of the validation library. MiSeq reads from the two pools are aligned to the guide sequences, and reads per guide and mismatches per read are summarized.
 
 ## Inputs
 
-FASTQ inputs:
-
-- `gs://<guide-pool-sequencing-bucket>/WALKUP-19964/fastqs/pool1_S1_L001_R1_001.fastq.gz`
-- `gs://<guide-pool-sequencing-bucket>/WALKUP-19964/fastqs/pool2_S2_L001_R1_001.fastq.gz`
-
-Reference input:
-
-- `data/guides.fa`
+- MiSeq FASTQs of the two plasmid pools (not public).
+- Guide reference: `metadata/validation_library_guides.fa.gz` (582 guides: 482 targeting the 30 elements and 100 non-targeting).
+- `source_data/`: per-guide read counts (`guide_counts.tsv`) and per-pool mismatch summaries (`mismatch_counts.tsv`, `mismatch_positions.tsv`). These were computed from the Bowtie alignments and are enough to regenerate the report.
 
 ## Code
 
-QC report code:
-
-- `analyses/2026-05-11_guide_pool_qc/pool_QC.Rmd`
-
-Command sequence used for preprocessing and alignment:
+Trimming and alignment (run outside this repository):
 
 ```bash
-# cutadapt v4.2
-cutadapt -a TTTAAX -o ../../../bowtie_pool_control_miseq/pool2_S2_L001_R1_001.trimmed.fastq.gz pool2_S2_L001_R1_001.fastq.gz
-cutadapt -a TTTAAX -o ../../../bowtie_pool_control_miseq/pool1_S1_L001_R1_001.trimmed.fastq.gz pool1_S1_L001_R1_001.fastq.gz
+# cutadapt 4.2
+cutadapt -a TTTAAX -o pool1_S1_L001_R1_001.trimmed.fastq.gz pool1_S1_L001_R1_001.fastq.gz
+cutadapt -a TTTAAX -o pool2_S2_L001_R1_001.trimmed.fastq.gz pool2_S2_L001_R1_001.fastq.gz
 
-# bowtie v2.5.0
+# Bowtie 1
+gunzip -c metadata/validation_library_guides.fa.gz > guides.fa
 bowtie-build guides.fa guides_index
 bowtie -v 1 -a --best --strata -x guides_index pool1_S1_L001_R1_001.trimmed.fastq.gz pool1_bowtie_out.txt
 bowtie -v 1 -a --best --strata -x guides_index pool2_S2_L001_R1_001.trimmed.fastq.gz pool2_bowtie_out.txt
 ```
 
-The R Markdown uses `data.table`, `ggplot2`, `stringr`, and `here` to summarize Bowtie output and generate QC plots.
+QC report: `analyses/2026-05-11_guide_pool_qc/pool_QC.Rmd`. If `results/guide_pool_qc/pool{1,2}_bowtie_out.txt` exist, the report is computed from the alignments; otherwise from `source_data/`.
 
-Render the PDF report from the repository root with:
+Run from `validations/`:
 
 ```bash
-RSTUDIO_PANDOC='/Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools/aarch64' \
-/usr/local/bin/Rscript -e "rmarkdown::render('analyses/2026-05-11_guide_pool_qc/pool_QC.Rmd', output_format = 'pdf_document', output_file = here::here('results', 'guide_pool_qc', 'guide_pool_qc.pdf'))"
+Rscript -e "rmarkdown::render('analyses/2026-05-11_guide_pool_qc/pool_QC.Rmd', output_dir = 'results/guide_pool_qc', output_file = 'guide_pool_qc.pdf')"
 ```
 
 ## Outputs
 
-Primary alignment outputs:
-
-- `results/guide_pool_qc/pool1_bowtie_out.txt`
-- `results/guide_pool_qc/pool2_bowtie_out.txt`
-
-Report outputs:
-
 - `results/guide_pool_qc/guide_pool_qc.pdf`
 - `results/guide_pool_qc/guide_counts.tsv`
-
-Per-pool QC directories:
-
-- `results/guide_pool_qc/pool1/`
-- `results/guide_pool_qc/pool2/`
-
-## Tool versions and settings
-
-- cutadapt: `4.2`
-- Bowtie: `2.5.0`
-- Alignment flags: `-v 1 -a --best --strata`
-- R environment: packages resolved via `renv.lock`

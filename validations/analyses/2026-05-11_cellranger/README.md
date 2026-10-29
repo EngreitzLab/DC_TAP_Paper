@@ -7,58 +7,26 @@ This analysis note documents the Cell Ranger count outputs used for downstream v
 
 ## Inputs
 
-Base GCS location:
-
-- `gs://<validation-cellranger-bucket>/cellranger_outputs`
-
-Example run directory:
-
-- `gs://<validation-cellranger-bucket>/cellranger_outputs/validation_moi11_3_rep01_a7/`
-
-Example files within a run:
-
-- `gs://<validation-cellranger-bucket>/cellranger_outputs/validation_moi11_3_rep01_a7/outs/filtered_feature_bc_matrix.h5`
-- `gs://<validation-cellranger-bucket>/cellranger_outputs/validation_moi11_3_rep01_a7/outs/metrics_summary.csv`
-- `gs://<validation-cellranger-bucket>/cellranger_outputs/validation_moi11_3_rep01_a7/outs/possorted_genome_bam.bam`
-
-The download script currently targets all listed validation runs under the bucket and copies the filtered H5 files locally.
+- Filtered feature-barcode matrices of the 16 10x channels, from GEO [GSE303901](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE303901) (`GSE303901_validation_*_filtered_feature_bc_matrix.h5`). GEO names the two high-MOI samples by their measured MOI (12.6 and 14.4); the code keeps the Cell Ranger sample IDs (`moi11_3`, `moi13`). The mapping is in `metadata/validation_screen_samples.tsv`.
+- Per-sample Cell Ranger `metrics_summary.csv` files. These are not public; their values are in `source_data/cellranger_metrics_summary.tsv`.
 
 ## Code
 
-Download script:
+- `scripts/bash/download_filtered_h5.sh` downloads the matrices from GEO into `data/filtered_h5/`, named `<sample_id>_filtered_feature_bc_matrix.h5`.
+- `analyses/2026-05-11_cellranger/extract_metrics_summary.R` plots the per-sample metrics. By default it reads `source_data/cellranger_metrics_summary.tsv`. If `VALIDATION_CELLRANGER_URI` points to a folder (local or `gs://`) with one Cell Ranger output folder per sample, it re-extracts the metrics from `<sample_id>/outs/metrics_summary.csv`.
 
-- `scripts/bash/download_filtered_h5.sh`
-
-Metrics extraction script:
-
-- `analyses/2026-05-11_cellranger/extract_metrics_summary.R`
-
-Run from the repository root:
+Run from `validations/`:
 
 ```bash
-./scripts/bash/download_filtered_h5.sh
-```
-
-Generate the per-sample metrics table from the repository root with:
-
-```bash
-PATH='/usr/bin:/bin:/usr/sbin:/sbin:<path-to-google-cloud-sdk>/bin' \
-/usr/local/bin/Rscript analyses/2026-05-11_cellranger/extract_metrics_summary.R
+bash scripts/bash/download_filtered_h5.sh
+Rscript analyses/2026-05-11_cellranger/extract_metrics_summary.R
 ```
 
 ## Outputs
 
-Local downloaded matrices:
-
-- `data/filtered_h5/`
-
-Extracted metrics table:
-
-- `results/cellranger/cellranger_metrics_summary.tsv`
-
-Each downloaded file is renamed to include the sample ID, for example:
-
-- `data/filtered_h5/validation_moi11_3_rep01_a7_filtered_feature_bc_matrix.h5`
+- `data/filtered_h5/<sample_id>_filtered_feature_bc_matrix.h5`
+- `results/cellranger_june_2026/cellranger_metrics_summary.tsv`
+- `results/cellranger_june_2026/pngs/<metric>.png`
 
 The extracted table standardizes the following fields from `metrics_summary.csv`:
 

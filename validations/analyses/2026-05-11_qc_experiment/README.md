@@ -2,67 +2,35 @@
 
 ## Purpose
 
-This analysis note documents the workflow used to build a merged Seurat object from filtered Cell Ranger H5 files, attach sample and feature metadata, and run QC comparisons including targeted-gene and scRNA-reference checks.
+Builds one merged Seurat object from the 16 filtered Cell Ranger matrices, attaches sample and feature metadata, keeps the guides that passed the plasmid-pool QC, and computes cell QC metrics. It also compares mean UMIs per targeted gene with a reference scRNA-seq dataset.
 
 ## Inputs
 
-Core inputs:
-
-- `data/filtered_h5/`
-- `data/terra_table_fixed_pairing.tsv`
-- `data/wtc11_encode_feature_reference_file_dups_removed_FIXED.csv`
-- `data/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv`
-- `data/Table_S4_primer_gene_list.tsv`
-- `data/gencode.v32.primary_assembly.annotation.gtf.gz`
-- `data/D0_10x5prime_pilot_counts_summary_ribo15_mt15_umi2000.tsv`
-- `results/guide_pool_qc/guide_counts.tsv`
+- `data/filtered_h5/`: from `scripts/bash/download_filtered_h5.sh` (GEO GSE303901)
+- `data/GSE303901_wtc11_feature_reference.csv` and `data/gencode.v32.primary_assembly.annotation.gtf.gz`: from `scripts/bash/download_references.sh`
+- `metadata/validation_screen_samples.tsv`, `metadata/Table_S4_primer_gene_list.tsv`
+- Table S3: `../results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv`
+- `analyses/2026-05-11_guide_pool_qc/source_data/guide_counts.tsv`
+- Reference scRNA-seq: `data/D0_10x5prime_pilot_counts_summary_ribo15_mt15_umi2000.tsv`, an internal 10x 5' dataset that is not public. Without it, the comparison is plotted from `source_data/gene_umi_comparison_quadrants.tsv`.
 
 ## Code
 
-Main notebooks:
+- `combine_h5_counts.Rmd`: merged Seurat object with sample metadata, gene IDs/symbols and guide metadata.
+- `qc_experiment.Rmd`: guide filtering, QC metrics and the reference comparison.
+- Shared functions: `scripts/R/utils.R`.
 
-- `analyses/2026-05-11_qc_experiment/combine_h5_counts.Rmd`
-- `analyses/2026-05-11_qc_experiment/qc_experiment.Rmd`
-
-Shared helper code:
-
-- `scripts/R/utils.R`
-
-Render the combined object notebook from the repository root with:
+Run from `validations/`:
 
 ```bash
-RSTUDIO_PANDOC='/Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools/aarch64' \
-/usr/local/bin/Rscript -e "rmarkdown::render('analyses/2026-05-11_qc_experiment/combine_h5_counts.Rmd', output_format = 'html_document', output_dir = 'results/qc_experiment', output_file = 'combine_h5_counts.html')"
-```
-
-Render the QC notebook from the repository root with:
-
-```bash
-RSTUDIO_PANDOC='/Applications/RStudio.app/Contents/Resources/app/quarto/bin/tools/aarch64' \
-/usr/local/bin/Rscript -e "rmarkdown::render('analyses/2026-05-11_qc_experiment/qc_experiment.Rmd', output_format = 'html_document', output_dir = 'results/qc_experiment', output_file = 'qc_experiment.html')"
+Rscript -e "rmarkdown::render('analyses/2026-05-11_qc_experiment/combine_h5_counts.Rmd', output_dir = 'results/qc_experiment_June_2026')"
+Rscript -e "rmarkdown::render('analyses/2026-05-11_qc_experiment/qc_experiment.Rmd', output_dir = 'results/qc_experiment_June_2026')"
 ```
 
 ## Outputs
 
-Merged object and annotation cache:
+In `results/qc_experiment_June_2026/`:
 
-- `results/qc_experiment/combined_cdna_seurat.rds`
-- `results/qc_experiment/gencode_v32_gene_types.tsv`
-
-Notebook outputs:
-
-- `results/qc_experiment/combine_h5_counts.html`
-- `results/qc_experiment/qc_experiment.html`
-
-QC comparison outputs:
-
-- `results/qc_experiment/compare_to_reference_scRNA.png`
-- `results/qc_experiment/compare_to_reference_scRNA.pdf`
-- `results/qc_experiment/gene_umi_comparison_quadrants.tsv`
-
-## Tool versions and settings
-
-- Seurat / SeuratObject workflow with RNA + gRNA assays
-- GTF import via `rtracklayer`
-- Data processing with `data.table` and sparse matrices from `Matrix`
-- Rendering via `rmarkdown` with `RSTUDIO_PANDOC`
+- `combined_cdna_seurat.rds`: merged object
+- `combined_cdna_seurat_filtered.rds`: object with QC metrics and pool-QC guides only (input to SCEPTRE)
+- `gencode_v32_gene_types.tsv`: gene-type cache
+- `compare_to_reference_scRNA.{png,pdf}`, `gene_umi_comparison_quadrants.tsv`
