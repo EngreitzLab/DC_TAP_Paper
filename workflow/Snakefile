@@ -67,7 +67,8 @@ rule create_main_figures_4_5_6:
     rules.main_figure_6_model_scores.output,
     rules.main_figure_2e_dctap_vs_qpcr.output,
     rules.main_figure_1cd_guide_capture_and_moi.output,
-    rules.main_figure_2i_slc2a3_qpcr.output
+    rules.main_figure_2i_slc2a3_qpcr.output,
+    rules.main_figure_2d_validation_vs_screen.output
 
 # All data panels of main Figures 1-6. Figs. 2b, 2c, 3a and 3b use the final calls (FDR 20%,
 # positive controls excluded) from rules/figures_wo_positive_controls.smk.

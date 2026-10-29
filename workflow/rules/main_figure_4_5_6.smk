@@ -107,3 +107,31 @@ rule main_figure_2i_slc2a3_qpcr:
   log: "results/main_figure_1_and_2/logs/main_figure_2i_slc2a3_qpcr.log"
   shell:
     "Rscript {input.script} {output} > {log} 2>&1"
+
+# GENCODE v32 gene annotation, used by the validation-screen analyses to map gene IDs to symbols
+rule download_gencode_v32_for_validations:
+  output:
+    "validations/data/gencode.v32.primary_assembly.annotation.gtf.gz"
+  shell:
+    "curl -fsSL --retry 3 -o {output} https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_32/gencode.v32.primary_assembly.annotation.gtf.gz"
+
+# Figure 2d (top): low-MOI validation screen vs full screen effect sizes (E. Mattei's compare_es.Rmd).
+# Also writes the high-MOI comparisons. Runs with --vanilla to skip the renv set-up in validations/.Rprofile.
+rule main_figure_2d_validation_vs_screen:
+  input:
+    rmd = "validations/analyses/2026-05-14_compare_low_high_es/compare_es.Rmd",
+    low_moi = "validations/analyses/2026-05-11_SCEPTRE/source_data/runs/low_moi_merged_union/sceptre_discovery_results.tsv",
+    high_moi = "validations/analyses/2026-05-11_SCEPTRE/source_data/runs/high_moi_merged_union/sceptre_discovery_results.tsv",
+    validation_pairs = "validations/metadata/validation_30_pairs.tsv",
+    gencode = "validations/data/gencode.v32.primary_assembly.annotation.gtf.gz",
+    table_s3 = "results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
+  output:
+    fig2d_top = "validations/results/2026-05-14_compare_low_high_es/scatter_effect_size_correlation_low_vs_paper.pdf",
+    high_vs_paper = "validations/results/2026-05-14_compare_low_high_es/scatter_effect_size_correlation_high_vs_paper.pdf",
+    high_vs_low = "validations/results/2026-05-14_compare_low_high_es/scatter_effect_size_correlation_high_vs_low.pdf"
+  log: "results/main_figure_1_and_2/logs/main_figure_2d_validation_vs_screen.log"
+  shell:
+    """
+    log=$(pwd)/{log}
+    cd validations && Rscript --vanilla -e "rmarkdown::render('analyses/2026-05-14_compare_low_high_es/compare_es.Rmd', output_dir = 'results/2026-05-14_compare_low_high_es', knit_root_dir = getwd())" > $log 2>&1
+    """

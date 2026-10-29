@@ -93,6 +93,7 @@ Supplementary Tables:
   | 1e | `downsampling_reads_for_UMIs` | `scripts/main_figure_1_and_2/downsampling_reads_for_UMIs.R` | `results/main_figure_1_and_2/downsampling_reads_for_UMIs/read_umi_saturation_comparison.pdf` |
   | 2b | `distance_by_effect_size_plots` | `scripts/main_figure_1_and_2/distance_by_effect_size_plots.R` | `results/main_figure_1_and_2/{k562,wtc11}_distance_by_es.pdf` |
   | 2c | `effect_size_plots` | `scripts/main_figure_1_and_2/effect_size_plots.R` | `results/main_figure_1_and_2/effect_size_boxplot.pdf`, `positive_control_self_promoters_effect_size_boxplot.pdf` |
+  | 2d (top) | `main_figure_2d_validation_vs_screen` | `validations/analyses/2026-05-14_compare_low_high_es/compare_es.Rmd` (from E. Mattei) | `validations/results/2026-05-14_compare_low_high_es/scatter_effect_size_correlation_low_vs_paper.pdf` |
   | 2d | `wtc11_multi_moi`, `make_replicates_plots` | `scripts/main_figure_1_and_2/wtc11_multi_moi.R`, `make_replicates_plots.R` | `results/main_figure_1_and_2/wtc11_multi_moi.pdf`, `compare_replicates/wtc11_plot.pdf` |
   | 2e | `main_figure_2e_dctap_vs_qpcr` | `scripts/main_figure_1_and_2/plot_dctap_vs_qpcr_effect_sizes.R` | `results/main_figure_1_and_2/qpcr_validation/dctap_vs_qpcr_effect_sizes.pdf` |
   | 2i | `main_figure_2i_slc2a3_qpcr` | `scripts/main_figure_1_and_2/plot_slc2a3_qpcr.R` (from J. Ray) | `results/main_figure_1_and_2/qpcr_validation/slc2a3_qpcr_guide5742.pdf` |
@@ -106,7 +107,7 @@ Supplementary Tables:
   | 5c,d | `main_figure_5_chromatin_categories`, `main_figure_5_housekeeping_genes` | `chromatin_categories_and_power_estimation.R`, `housekeeping_genes.R` | `results/main_figure_5_and_6/{housekeeping_genes,hkg_comparison}/` |
   | 6a–d | `main_figure_6_model_scores` | `results/main_figure_5_and_6/model_scores.R` | `results/main_figure_5_and_6/e2g_model_scores/ENCODE_rE2G/` (ABC and AlphaGenome for Extended Data Fig. 13 in sibling folders) |
 
-  Panels 1a,b, 2a, 4a and 5a are schematics, and 2g is a genome-browser view. Panels 1e and 2d (top) are not yet scripted.
+  Panels 1a,b, 2a, 4a and 5a are schematics, and 2g is a genome-browser view. Panel 1e uses the read-downsampling rule above but does not yet match the submitted panel (inputs pending).
 - Inputs to Figures 4–6 come from other pipelines and are checked in as derived tables:
   - `resources/main_figure_4/indirect_effects/`: output of [CRISPR_indirect_effects](https://github.com/EngreitzLab/CRISPR_indirect_effects) (cis/trans hit rates and the direct-effect model)
   - `resources/main_figure_6/expt_pred_merged_annot.txt.gz`: output of the [CRISPR_comparison](https://github.com/EngreitzLab/CRISPR_comparison) benchmarking pipeline for DC-TAP-seq pairs
