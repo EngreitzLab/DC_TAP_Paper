@@ -2,9 +2,6 @@
 # Currently kept on Sherlock in the original analysis directory; link them into a clone with
 #   bash workflow/scripts/link_large_inputs.sh <directory containing these paths>
 # Fig. 1e: UMI downsampling (CellRanger outputs)
-resources/main_figure_1_and_2/downsampling_reads_for_UMIs/crisprdi_direct_capture/molecule_info.h5
-resources/main_figure_1_and_2/downsampling_reads_for_UMIs/crisprdi_direct_capture/filtered_feature_bc_matrix.h5
-resources/main_figure_1_and_2/downsampling_reads_for_UMIs/moi3_fixed/molecule_info.h5
 # Fig. 2d: replicate SCEPTRE runs
 results/main_figure_1_and_2/compare_replicates/K562_DC_TAP_Seq_1
 results/main_figure_1_and_2/compare_replicates/K562_DC_TAP_Seq_2
