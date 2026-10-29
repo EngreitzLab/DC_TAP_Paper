@@ -79,13 +79,13 @@ Supplementary Tables:
   ```
   pixi install
   bash workflow/scripts/download_large_inputs_from_zenodo.sh   # large inputs, ~0.5 GB (see below)
-  pixi run main-figures      # = workflow/scripts/run_main_figures.sh; ~55 min on 8 cores incl. building conda envs (tested on Sherlock, 2026-10-13)
+  pixi run main-figures      # = workflow/scripts/run_main_figures.sh; ~90 min on 8 cores incl. building conda envs (tested on a fresh clone on Sherlock, 2026-10-29)
   ```
   Figures 4–6 need only files in the repository and can be made on their own (no conda, ~1 min):
   ```
   pixi run snakemake --cores 4 create_main_figures_4_5_6
   ```
-  A few large inputs (replicate SCEPTRE objects for Fig. 2d, WTC11 count matrices for Fig. 2h, reprocessed Gasperini et al. results for Figs. 2f and 3a,b) are not in the repository; they are listed in `config/large_inputs_on_sherlock.txt` and are deposited on Zenodo ([10.5281/zenodo.23775358](https://doi.org/10.5281/zenodo.23775358)). `download_large_inputs_from_zenodo.sh` downloads them, places them at their repository paths and checks their MD5 sums. On Sherlock, `workflow/scripts/link_large_inputs.sh <source_dir> [fdr20_run_dir]` links them from the original analysis directories instead.
+  A few large inputs (replicate SCEPTRE objects for Fig. 2d, WTC11 count matrices for Fig. 2h, reprocessed Gasperini et al. results for Figs. 2f and 3a,b) are not in the repository; they are listed in `config/large_inputs.txt` and are deposited on Zenodo ([10.5281/zenodo.23775358](https://doi.org/10.5281/zenodo.23775358)). `download_large_inputs_from_zenodo.sh` downloads them, places them at their repository paths and checks their MD5 sums.
 
   | Panel | Rule (`workflow/`) | Script | Output |
   |---|---|---|---|

@@ -2,6 +2,8 @@
 This directory contains resources used to benchmark E2G models on the DC-TAP-seq CRISPR data:
 
 - `merge_dc_tap_elements.R`: Resize and merge DC-TAP-seq elements for benchmarking
+- `EPBenchmark_DC_TAPseq_randomElementGenePairs_0.8pwrAt25effect.tsv.gz`: its output, the CRISPR benchmark (`expt`) file
+- `download_encode_e2g_predictions.sh`: download the ENCODE-rE2G and ABC prediction files listed below
 - `dc_tap_seq_paper.yml`: CRISPR benchmarking pipeline config file specifying input files for
 comparisons to run
 - `benchmarking_pred_config_with_alpha.tsv`: predictor config file specifying parameters for E2G

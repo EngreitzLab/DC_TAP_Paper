@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Re-create all data panels of main Figures 1-6 from the tables in the repository (plus the large
-# inputs listed in config/large_inputs_on_sherlock.txt). Run inside the pixi environment:
+# inputs listed in config/large_inputs.txt). Run inside the pixi environment:
 #   pixi run bash workflow/scripts/run_main_figures.sh [cores]
 # Only figure rules may run (--allowed-rules): a fresh clone gives every file a new timestamp, which
 # would otherwise make Snakemake re-run the full upstream pipeline from the raw CellRanger outputs.

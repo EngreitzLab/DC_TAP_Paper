@@ -1,16 +1,20 @@
+# Paths are relative to the CRISPR_comparison pipeline directory. Copy in:
+#   resources/e2g_predictions/ENCFF*.bed.gz  ENCODE-rE2G and ABC predictions (crispr_benchmarking/download_encode_e2g_predictions.sh)
+#   resources/EPBenchmark_*.tsv.gz           crispr_benchmarking/EPBenchmark_DC_TAPseq_randomElementGenePairs_0.8pwrAt25effect.tsv.gz
+#   resources/e2g_predictions/correlation_*  DNase-expression correlation baseline; not deposited
 comparisons:
   DC_TAPseq:
     pred:
       ABCdnase:
-        ["/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/ABC/dhs_only/K562_ENCSR000EOT/Predictions/EnhancerPredictionsAllPutative.tsv.gz",
-         "/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/ABC/dhs_only/WTC11_ENCSR785ZUI/Predictions/EnhancerPredictionsAllPutative.tsv.gz"]
+        ["resources/e2g_predictions/ENCFF681DDZ.bed.gz",
+         "resources/e2g_predictions/ENCFF660VQW.bed.gz"]
       ENCODE_rE2G:
-        ["/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/ENCODE-rE2G/dhs_only/full_predictions/encode_e2g_predictions_K562_ENCSR000EOT_full_predictions.tsv.gz",
-         "/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/ENCODE-rE2G/dhs_only/full_predictions/encode_e2g_predictions_WTC11_ENCSR785ZUI_full_predictions.tsv.gz"]
+        ["resources/e2g_predictions/ENCFF970QAX.bed.gz",
+         "resources/e2g_predictions/ENCFF071ZZU.bed.gz"]
       correlation_k562_dnase:
-        ["/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/Correlation/correlation_K562_ENCSR000EOT_full_predictions.tsv.gz",
-         "/oak/stanford/groups/engreitz/Projects/Benchmarking/Revisions/Predictors/Correlation/correlation_WTC11_ENCSR785ZUI_full_predictions.tsv.gz"]
-    expt: "/oak/stanford/groups/engreitz/Users/agschwin/distal_regulation_paper/CRISPR_benchmarks/WIP/resize_final_dc_tap_elements_20250820/EPBenchmark_DC_TAPseq_randomElementGenePairs_0.8pwrAt25effect.tsv.gz"
+        ["resources/e2g_predictions/correlation_K562_ENCSR000EOT_full_predictions.tsv.gz",
+         "resources/e2g_predictions/correlation_WTC11_ENCSR785ZUI_full_predictions.tsv.gz"]
+    expt: "resources/EPBenchmark_DC_TAPseq_randomElementGenePairs_0.8pwrAt25effect.tsv.gz"
     gene_universe: "resources/genome_annotations/CollapsedGeneBounds.hg38.bed"
     tss_universe: "resources/genome_annotations/CollapsedGeneBounds.hg38.TSS500bp.bed"
     pred_config: "config/predictor_config_files/benchmarking_pred_config_with_alpha.tsv"

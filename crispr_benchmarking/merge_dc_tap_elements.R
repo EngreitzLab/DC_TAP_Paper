@@ -1,13 +1,14 @@
 ## Resize and merge DC-TAP-seq elements for CRISPR benchmarking
 
 library(tidyverse)
-library(here)
 
 # parameters
 sig_col <- "significant_wo_pos_controls_20fdr"
 
 # load DC-TAP-seq data
-crispr_file <- here("WIP/resize_final_dc_tap_elements_20250820/TableS3_directEffectRate_chromatinCategories.tsv")
+# usage: Rscript merge_dc_tap_elements.R <Table S3 with direct effect rates and chromatin categories> [output_file]
+args <- commandArgs(trailingOnly = TRUE)
+crispr_file <- args[1]
 crispr <- read_tsv(crispr_file, show_col_types = FALSE)
 
 # select required columns
@@ -74,5 +75,5 @@ epbench_wtc11 <- epbench_wtc11 %>%
 output <- bind_rows(epbench_k562, epbench_wtc11)
 
 # save to output file
-output_file <- here("WIP/resize_final_dc_tap_elements_20250820/EPBenchmark_DC_TAPseq_randomElementGenePairs_0.8pwrAt25effect.tsv.gz")
+output_file <- if (length(args) > 1) args[2] else "EPBenchmark_DC_TAPseq_randomElementGenePairs_0.8pwrAt25effect.tsv.gz"
 write_tsv(output, file = output_file)

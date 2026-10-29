@@ -1,7 +1,6 @@
 # Large figure inputs that are not in the repository (paths relative to the repository root).
-# Currently kept on Sherlock in the original analysis directory; link them into a clone with
-#   bash workflow/scripts/link_large_inputs.sh <directory containing these paths>
-# Fig. 1e: UMI downsampling (CellRanger outputs)
+# They are deposited on Zenodo (https://doi.org/10.5281/zenodo.23775358); download them into a clone with
+#   bash workflow/scripts/download_large_inputs_from_zenodo.sh
 # Fig. 2d: replicate SCEPTRE runs
 results/main_figure_1_and_2/compare_replicates/K562_DC_TAP_Seq_1
 results/main_figure_1_and_2/compare_replicates/K562_DC_TAP_Seq_2
@@ -13,6 +12,5 @@ results/process_validation_datasets/WTC11_DC_TAP_Seq/raw_counts/dge.rds
 results/process_validation_datasets/WTC11_DC_TAP_Seq/raw_counts/perturb_status.rds
 # Fig. 2f, Fig. 3a,b: reprocessed Gasperini et al. results
 results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories.tsv
-# Figs. 2-3 (FDR 20%, positive controls excluded): reprocessed Gasperini et al. results with final calls.
-# Second column: source directory key (see workflow/scripts/link_large_inputs.sh); default is the first source.
-results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv	fdr20_run
+# Figs. 2-3, 5 (FDR 20%, positive controls excluded): reprocessed Gasperini et al. results with final calls
+results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv

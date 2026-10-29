@@ -83,3 +83,4 @@ HANDOFF.md
 .pixi/
 validations/data/
 resources/zenodo_download/
+resources/e2g_predictions/
