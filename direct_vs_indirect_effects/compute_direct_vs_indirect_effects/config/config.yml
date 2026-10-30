@@ -1,0 +1,72 @@
+## Input files and dataset parameters for the compute_direct_vs_indirect_effects snakemake workflow
+
+# URL to download required input files from Zenodo
+zenodo_url: "https://zenodo.org/api/records/23775358/draft/files/direct_vs_indirect_effects_files.tar.gz/content"
+
+# Results from Gasperini 2019 indirect analyses results from ENCODE combined K562 data workflow.
+# This dataset is also referred to as 'training' data in parts of this workflow because of it's
+# origin from Gschwind et al; 2026.
+#
+# These files are automatically download by the workflow from Zenodo
+#
+# To reproduce these files: use workflow in https://github.com/argschwind/ENCODE_CRISPR_data to
+# perform indirect effects analysis for the Gasperini 2019 dataset
+Gasperini2019:
+  cis_rates: "resources/Gasperini2019_cis_positive_rate_0.13gStd_MAST_perCRE_GRCh38.tsv"
+  trans_rates: "resources/Gasperini2019_trans_positive_rate_0.13gStd_MAST_perCRE_GRCh38.tsv"
+
+# Datasets for which to compute indirect effects using sceptre. These datasets are also referred to
+# as 'held-out' data in parts of this workflow because of their origin from Gschwind et al; 2026.
+#
+# Files form other datasets than the K562 and WTC11 DC-TAP-seq screens are automatically download by
+# the workflow from Zenodo
+#
+# To reproduce input data other than the K562 and WTC11 DC-TAP-seq screens, use workflow in
+# https://github.com/EngreitzLab/ENCODE_Test_Dataset_Analysis to produce required input files
+datasets:
+  K562_DC_TAPseq:
+    sceptre_object: "../../results/process_validation_datasets/K562_DC_TAP_Seq/differential_expression/sceptre_diffex_input.rds"
+    genome: "../../results/genome_annotation_files/gencode.v26lift37.annotation.gtf.gz"
+    guide_assignment_method: "thresholding"
+    guide_threshold: 5
+    results: "resources/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_fdr20.tsv.gz"
+    dist_threshold: 250000
+  WTC11_DC_TAPseq:
+    sceptre_object: "../../results/process_validation_datasets/WTC11_DC_TAP_Seq/differential_expression/sceptre_diffex_input.rds"
+    genome: "../../results/genome_annotation_files/gencode.v26lift37.annotation.gtf.gz"
+    guide_assignment_method: "thresholding"
+    guide_threshold: 5
+    results: "resources/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_fdr20.tsv.gz"
+    dist_threshold: 250000
+  Klann2021:
+    sceptre_object: "resources/Klann2021_sceptre_diffex_input.rds"
+    genome: "resources/gencode.v29.annotation.gtf.gz"
+    guide_assignment_method: "mixture"
+    guide_threshold: Null
+    cis_results: "resources/Klann2021_results_run_discovery_analysis.rds"
+    encode_file: "resources/ENCODE_Klann2021_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz"
+    dist_threshold: 250000
+  Xie2019:
+    sceptre_object: "resources/Xie2019_sceptre_diffex_input.rds"
+    genome: "resources/gencode.v29.annotation.gtf.gz"
+    guide_assignment_method: "mixture"
+    guide_threshold: Null
+    cis_results: "resources/Xie2019_results_run_discovery_analysis.rds"
+    encode_file: "resources/ENCODE_Xie2019_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz"
+    dist_threshold: 250000
+  Morris2023_v1:
+    sceptre_object: "resources/Morris2023_v1_sceptre_diffex_input.rds"
+    genome: "resources/gencode.v29.annotation.gtf.gz"
+    guide_assignment_method: "mixture"
+    guide_threshold: Null
+    cis_results: "resources/Morris2023_v1_results_run_discovery_analysis.rds"
+    encode_file: "resources/ENCODE_Morrisv1_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz"
+    dist_threshold: 250000
+  Morris2023_v2:
+    sceptre_object: "resources/Morris2023_v2_sceptre_diffex_input.rds"
+    genome: "resources/gencode.v29.annotation.gtf.gz"
+    guide_assignment_method: "mixture"
+    guide_threshold: Null
+    cis_results: "resources/Morris2023_v2_results_run_discovery_analysis.rds"
+    encode_file: "resources/ENCODE_Morrisv2_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz"
+    dist_threshold: 250000
