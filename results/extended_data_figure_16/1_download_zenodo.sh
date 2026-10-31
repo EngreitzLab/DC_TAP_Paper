@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-BASE_URL="https://zenodo.org/api/records/23775358/draft/files"
+BASE_URL="https://zenodo.org/api/records/23775358/files"
 OUT_DIR="data"
 
 FILES=(
@@ -13,9 +13,7 @@ mkdir -p "$OUT_DIR"
 
 for f in "${FILES[@]}"; do
     echo "Downloading $f"
-    curl -fSL -H "Authorization: Bearer $ZENODO_TOKEN" \
-        -o "$OUT_DIR/$f" \
-        "$BASE_URL/$f/content"
+    curl -fSL -o "$OUT_DIR/$f" "$BASE_URL/$f/content"
 done
 
 echo "Done. Files saved in $OUT_DIR/"

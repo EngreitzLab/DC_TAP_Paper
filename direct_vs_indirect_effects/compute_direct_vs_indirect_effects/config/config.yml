@@ -1,7 +1,7 @@
 ## Input files and dataset parameters for the compute_direct_vs_indirect_effects snakemake workflow
 
 # URL to download required input files from Zenodo
-zenodo_url: "https://zenodo.org/api/records/23775358/draft/files/direct_vs_indirect_effects_files.tar.gz/content"
+zenodo_url: "https://zenodo.org/records/23775358/files/direct_vs_indirect_effects_files.tar.gz?download=1"
 
 # Results from Gasperini 2019 indirect analyses results from ENCODE combined K562 data workflow.
 # This dataset is also referred to as 'training' data in parts of this workflow because of it's

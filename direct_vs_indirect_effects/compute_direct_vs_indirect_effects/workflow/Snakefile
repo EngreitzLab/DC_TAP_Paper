@@ -43,8 +43,7 @@ rule download_zenodo:
   conda: "envs/sceptre.yml"
   shell:
     """
-    curl -fsSL -H "Authorization: Bearer $ZENODO_TOKEN" "{params.download_url}" |
-      tar -xzf - -C resources --strip-components=1
+    curl -fsSL "{params.download_url}" | tar -xzf - -C resources --strip-components=1
     """
   
 # combine positive hit rates of held-out and training datasets
