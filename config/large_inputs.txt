@@ -1,5 +1,4 @@
-# Large figure inputs that are not in the repository (paths relative to the repository root).
-# They are deposited on Zenodo (https://doi.org/10.5281/zenodo.23775358); download them into a clone with
+# Large figure inputs (paths relative to the repository root), deposited on Zenodo (https://doi.org/10.5281/zenodo.23775358); download them into a clone with
 #   bash workflow/scripts/download_large_inputs_from_zenodo.sh
 # Fig. 2d: replicate SCEPTRE runs
 results/main_figure_1_and_2/compare_replicates/K562_DC_TAP_Seq_1

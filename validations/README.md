@@ -1,8 +1,5 @@
 # DC-TAP-seq Validations
 
-> [!WARNING]
-> This directory is a work in progress and may not be complete or fully accurate.
-
 This folder contains analysis code and notebook for DC-TAP-seq validation experiments.
 
 ## Overview

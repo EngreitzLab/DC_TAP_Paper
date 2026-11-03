@@ -38,7 +38,7 @@ results/main_figure_1_and_2/duplicate_pairs_analysis/power_analysis/*
 !results/main_figure_1_and_2/duplicate_pairs_analysis/power_analysis/output_0.13gStd_Sceptre_perCRE.tsv
 results/main_figure_1_and_2/duplicate_pairs_analysis/perturb_sce.rds
 results/main_figure_1_and_2/duplicate_pairs_analysis/raw_counts.rds
-# Temporarily excluding this file here because its a little over github's 50Mb file limit (76Mb) - should gzip
+# Large inputs on Zenodo (config/large_inputs.txt)
 results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories.tsv
 results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv
 
@@ -78,7 +78,7 @@ validations/src/python/__pycache__/
 # macOS
 .DS_Store
 
-# Internal working docs (not part of the public submission)
+# Working notes
 HANDOFF.md
 .pixi/
 validations/data/

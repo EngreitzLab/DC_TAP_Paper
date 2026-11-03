@@ -430,10 +430,10 @@ read_enh_lists <- function(file_path, remove_promoters) {
 # usage (from the repository root):
 #   Rscript chromatin_categories_and_power_estimation.R plot [results_dir]
 #       plots Fig. 3c, Fig. 5b-d and associated supplementary figures from the categorized pairs in
-#       results/main_figure_5_and_6/categorized_pairs (checked into the repository)
+#       results/main_figure_5_and_6/categorized_pairs
 #   Rscript chromatin_categories_and_power_estimation.R categorize [results_dir] [large_inputs_dir]
 #       first re-creates the categorized pairs from the chrom-annotate, direct-effect and ENCODE-rE2G
-#       outputs in large_inputs_dir (large files; not in the repository)
+#       outputs in large_inputs_dir
 args <- commandArgs(trailingOnly = TRUE)
 mode <- if (length(args) >= 1) args[1] else "plot"
 results_dir <- if (length(args) >= 2) args[2] else "results/main_figure_5_and_6"

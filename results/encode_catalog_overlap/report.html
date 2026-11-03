@@ -651,15 +651,7 @@ code{background:#eef1f3;padding:1px 5px;border-radius:3px;font-size:13px}
 <b>Significant depletions.</b> Testing the same targets for <i>under</i>-representation (FDR&lt;0.1 with odds ratio &lt; 1) in negative-effect positives vs the well-powered background yields 0 in K562 and 2 in WTC11: WTC11 H2AFZ (OR=0.38, FDR=0.055); WTC11 H3K27me3 (OR=0.30, FDR=0.071). H2A.Z (<code>H2AFZ</code>) marks nucleosome-flanked promoters/insulators and is the only mark whose 95% CI sits entirely below 0 in the full dot plot — consistent with distal activating enhancers being relatively H2A.Z-poor.
 </div>
 
-<h2>5. Draft reply to the reviewer</h2>
-<div class="box">
-<p>We thank the reviewer for this suggestion. We have now systematically intersected our randomly-selected DC-TAP-seq elements with the complete catalog of ENCODE ChIP-seq experiments in unperturbed cells for both cell types. For K562 this comprised 536 ChIP-seq experiments spanning 536 unique targets (524 transcription factors and 12 histone marks); for WTC11 the native histone data on ENCODE come exclusively from Mint-ChIP-seq (there is no conventional Histone ChIP-seq for WTC11), so we queried TF ChIP-seq, Histone ChIP-seq and Mint-ChIP-seq and additionally included the closest ENCODE iPSC/ESC lines (H1, H9) to cover histone marks not natively assayed in WTC11, giving 168 experiments across 168 targets (140 TFs, 28 histone marks). The two histone marks central to the manuscript's WTC11 categorization — H3K27ac and H3K27me3 — are both available as native WTC11 Mint-ChIP-seq.</p>
-<p>This analysis largely recapitulates the chromatin picture captured by our original chromatin categories, with active enhancers (significant hits with negative effect size) carrying TF and histone-mark occupancy. We found that DC-TAP-seq negative-effect positives are broadly and significantly enriched for TF and histone-mark occupancy relative to background: 10 targets in K562 and 43 in WTC11 reach FDR&lt;0.1, with top-ranked factors (ZNF184, TRIM28, E2F8, MTA2, SMAD4, LARP7 in K562; POLR2AphosphoS5, TAF7, H4K91ac, NFATC4, POLR2A, ZNF416 in WTC11) dominated by general transcriptional/enhancer-associated machinery rather than a single specific factor. On the other hand, positive-effect positives show essentially no enrichment.</p>
-<p>We have added Supplementary Figure X-TF with these results, and a sentence to the Results noting the broader trends from the analysis:</p>
-</div>
-<p class="cap">Counts are generated directly from the pipeline outputs at report-build time.</p>
-
-<h2>6. Methods & reproducibility</h2>
+<h2>5. Methods & reproducibility</h2>
 <p>The pipeline takes <b>Table S3</b> as its only biological input and is fully scripted:</p>
 <ol>
 <li><b>Element sets</b> — <span class="mono">build_element_sets.py</span>: parses Table S3, filters to <code>Random_DistalElement_Gene==True</code> per cell type, dedups to element loci, writes BED files.</li>

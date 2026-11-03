@@ -1,22 +1,8 @@
-# Provenance notes. "<Engreitz lab storage>" is internal lab storage; the design file
-# (sgOpti-DC), guide-target files and BED files used by the pipeline are checked into this directory.
+WTC11 screen design files (rules in workflow/rules/sceptre_setup.smk).
 
-Both 220308... and wtc11_full_gene... were taken from Evvie's directories, but should be recreated
-In the screen design part of the pipeline
-
-
-even_older_guide_targets.tsv comes from <Engreitz lab storage>/Users/jgalante/ENCODE_nonK562_Validation_Datasets/DC_TAP/CRISPRiScreen_w_Sceptre/resources/DC_TAP/old_guide_targets.tsv
-where the naming convention comes from the fact that I used a similar "pre-merged" file from Evvie for the K562 DC TAP but "even older" is because in the K562 DC TAP I also used a post-merged old file
-
-
-ChosenGenes.AllRegions.bed was copied from <Engreitz lab storage>/Users/dulguun/CRISPRDesign/220303_WTC11_Random_Screen_allTSS/01_ChooseRegions/ChosenGenes.AllRegions.bed
-
-The ChosenGenes.DistalElements.bed was copied from <Engreitz lab storage>/Users/dulguun/CRISPRDesign/220310_WTC11_Random_Screen_controlDE_macs2/01_ChooseRegions/ChosenGenes.AllRegions.bed
-
-
-# The guide design files were copied from [,] into the resources directory 
-  # <Engreitz lab storage>/Users/dulguun/CRISPRDesign/220308_Random_Screen_FinalDesignFiles/220308_K562_Random_Screen_Crop.design.txt
-  # <Engreitz lab storage>/Users/dulguun/CRISPRDesign/220308_Random_Screen_FinalDesignFiles/220308_WTC11_Random_Screen_Crop.design.txt
-  
-  
-The sgOpti-DC file was modified by Dulguun to create the CROP file. Which is just a replacement in the "name" column so that sgOpti-DC became CROP. I'm currently using the older versino of the CROP file listd in the file path above which just replaces the name - not anything else i.e. the guide numbers are all the same
+- 220308_WTC11_Random_Screen_sgOpti-DC.design.txt: gRNA design. Also on the IGVF Data Portal (IGVFFI0580WJFK).
+- ChosenGenes.AllRegions.bed: all targeted regions.
+- ChosenGenes.DistalElements.bed: targeted distal elements.
+- even_older_guide_targets.tsv: guide-to-target table before merging overlapping targets; used to define promoter target regions.
+- wtc11_full_gene_set_use_real_w_ensemble_id.txt: targeted genes with Ensembl IDs.
+- cell_ranger_output/: Cell Ranger outputs. Download from GEO GSE303901.

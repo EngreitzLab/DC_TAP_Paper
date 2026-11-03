@@ -44,8 +44,7 @@ rule extended_data_figure_15_direct_indirect_rates:
     """
 
 # Extended Data Fig. 16b,c: indirect effects of DC-TAP-seq vs genome-wide elements and genes
-# (Gasperini et al. 2019). Fig. 16a,d need the per-dataset SCEPTRE outputs of the full workflow
-# (results/extended_data_figure_16/README.md).
+# (Gasperini et al. 2019)
 rule extended_data_figure_16bc_genome_wide_indirect_effects:
   input:
     rmd = "results/extended_data_figure_16/3_genome_wide_indirect_effects_extdata_fig16bc.Rmd",
@@ -170,7 +169,7 @@ rule main_figure_2d_validation_vs_screen:
     cd validations && Rscript --vanilla -e "rmarkdown::render('analyses/2026-05-14_compare_low_high_es/compare_es.Rmd', output_dir = 'results/2026-05-14_compare_low_high_es', knit_root_dir = getwd())" > $log 2>&1
     """
 
-# Figure 1e: UMI saturation of DC-TAP-seq vs scRNA-seq with guide capture (J. Ray's read-downsampling tables)
+# Figure 1e: UMI saturation of DC-TAP-seq vs scRNA-seq with guide capture (read-downsampling tables)
 rule main_figure_1e_umi_saturation:
   input:
     script = "workflow/scripts/main_figure_1_and_2/plot_umi_saturation_dctap_vs_scrna.R",
