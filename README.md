@@ -5,7 +5,7 @@ This repository contains the workflow for analyzing datasets generated from an u
 ## Data and code availability
 
 - **Manuscript:** [A systematic survey of distal element-gene regulatory interactions with Direct-Capture Targeted Perturb-seq](https://www.biorxiv.org/content/10.1101/2025.09.16.676677v2)
-- **Source code:** https://github.com/EngreitzLab/DC_TAP_Paper (release tag `v1.2.0`, used for the revised manuscript; `v1.0.0` was the original submission).
+- **Source code:** https://github.com/EngreitzLab/DC_TAP_Paper (release tag `v2.0.0`, used for the revised manuscript; `v1.0.0` was the original submission).
 - **Raw sequencing data:** pilot DC-TAP-seq, validation DC-TAP-seq, and CTCF ChIP-seq experiments are available from the NCBI Gene Expression Omnibus under accession [`GSE303901`](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE303901).
 - **Epigenomic annotation data:** ENCODE Portal (https://www.encodeproject.org); file accessions are listed in Supplementary Table 8 of the manuscript.
 - **gRNA design files:** IGVF Data Portal — accessions `IGVFFI7272YLVI` (K562) and `IGVFFI0580WJFK` (WTC11).
@@ -128,7 +128,7 @@ Supplementary Tables:
 - conda or mamba (to build the 11 per-rule environments in `workflow/envs/`)
 - Python 3.8/3.9
 - UCSC `liftOver` binary (via `bioconda::ucsc-liftover`, used in `workflow/rules/create_encode_output.smk`)
-- `r-sceptre` / `r-sceptre-dev` — installed from the **non-standard `jgalante` Anaconda.org channel**, pinned by version, build and sha256 in `workflow/envs/`. Source versions (identified by matching the installed code to the [Katsevich-Lab/sceptre](https://github.com/Katsevich-Lab/sceptre) history):
+- `r-sceptre` / `r-sceptre-dev` — installed from the **non-standard `jgalante` Anaconda.org channel**, pinned by version, build and sha256 in `workflow/envs/`. Source versions ([Katsevich-Lab/sceptre](https://github.com/Katsevich-Lab/sceptre); confirmed by J. Galante, who built the packages):
   - `r-sceptre 0.10.1` = tag `v0.10.1`, commit `43a4534`; fallback: `remotes::install_github("Katsevich-Lab/sceptre@43a4534")`
   - `r-sceptre-dev 0.10.1dev` (confidence intervals) = commit `1517ebc`; fallback: `remotes::install_github("Katsevich-Lab/sceptre@1517ebc")`
 
@@ -143,7 +143,7 @@ Supplementary Tables:
    ```
    git clone https://github.com/EngreitzLab/DC_TAP_Paper.git
    cd DC_TAP_Paper
-   git checkout v1.2.0
+   git checkout v2.0.0
    ```
 2. Install a conda/mamba distribution, then install Snakemake into a base environment, e.g.:
    ```

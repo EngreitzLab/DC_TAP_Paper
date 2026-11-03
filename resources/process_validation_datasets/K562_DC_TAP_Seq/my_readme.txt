@@ -1,5 +1,5 @@
-# Provenance notes. "<Engreitz lab storage>" is internal lab storage at Stanford, not accessible
-# outside the lab.
+# Provenance notes. "<Engreitz lab storage>" is internal lab storage; the design file, guide-target
+# files and BED file used by the pipeline are checked into this directory.
 
 The Crop.design.txt file was copied from Evvie's directory
 

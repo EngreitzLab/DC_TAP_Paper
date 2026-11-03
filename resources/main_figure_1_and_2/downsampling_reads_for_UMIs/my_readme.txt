@@ -1,5 +1,7 @@
-# Provenance notes. "<Engreitz lab storage>" is internal lab storage at Stanford, not accessible
-# outside the lab.
+# Provenance notes for the inputs of the old rule downsampling_reads_for_UMIs. "<Engreitz lab
+# storage>" is internal lab storage. This rule is not part of the figure command: Fig. 1e is made
+# from J. Ray's tables in resources/main_figure_1_and_2/umi_saturation_dctap_vs_scrna/. Only
+# moi3_fixed/filtered_feature_bc_matrix.h5 is in the repository.
 
 # Source file locations for downsampling analysis
 

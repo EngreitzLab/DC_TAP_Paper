@@ -1,5 +1,5 @@
-# Provenance notes. "<Engreitz lab storage>" is internal lab storage at Stanford, not accessible
-# outside the lab.
+# Provenance notes. "<Engreitz lab storage>" is internal lab storage; the design file
+# (sgOpti-DC), guide-target files and BED files used by the pipeline are checked into this directory.
 
 Both 220308... and wtc11_full_gene... were taken from Evvie's directories, but should be recreated
 In the screen design part of the pipeline

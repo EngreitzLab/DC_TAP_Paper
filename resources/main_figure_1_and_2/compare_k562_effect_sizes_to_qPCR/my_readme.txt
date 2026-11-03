@@ -1,5 +1,6 @@
-# Provenance notes. "<Engreitz lab storage>" is internal lab storage at Stanford, not accessible
-# outside the lab.
+# Provenance notes: where the files in this directory were copied from. "<Engreitz lab storage>"
+# is internal lab storage; every file needed (barcodes, features, matrix, qPCR tables) is checked
+# into this directory.
 
 The L-SG-TAP-Whole results were taken from this path in Evvie's directories: <Engreitz lab storage>/Users/ejagoda/hgrm/220523_high_moi_tap_dc_ampli_tap_pilot/10x_analysis/052322_analysis_L-SG-TAP-Whole
 The tar.gz file was unzipped and untarred with "tar -xvzf filtered_feature_bc_matrix.tar.gz", which resulted in the "barcodes", "features", and "matrix" files
