@@ -150,29 +150,8 @@ rule compare_k562_effect_sizes_to_qPCR:
   script:
     "../scripts/main_figure_1_and_2/compare_k562_effect_sizes_to_qPCR.R"   
     
-# Downsampling Analysis Rule
-rule downsampling_reads_for_UMIs:
-  input:
-    # CRISPRi Direct Capture files
-    crisprdi_mol_info = "resources/main_figure_1_and_2/downsampling_reads_for_UMIs/crisprdi_direct_capture/molecule_info.h5",
-    crisprdi_filtered_h5 = "resources/main_figure_1_and_2/downsampling_reads_for_UMIs/crisprdi_direct_capture/filtered_feature_bc_matrix.h5",
-    # DC-TAP-seq (MOI3) files
-    moi3_mol_info = "resources/main_figure_1_and_2/downsampling_reads_for_UMIs/moi3_fixed/molecule_info.h5",
-    moi3_filtered_h5 = "resources/main_figure_1_and_2/downsampling_reads_for_UMIs/moi3_fixed/filtered_feature_bc_matrix.h5"
-  output:
-    plot_pdf = "results/main_figure_1_and_2/downsampling_reads_for_UMIs/read_umi_saturation_comparison.pdf",
-    combined_results = "results/main_figure_1_and_2/downsampling_reads_for_UMIs/combined_results.csv"
-  log: "results/main_figure_1_and_2/logs/downsampling_reads_for_UMIs.log"
-  conda:
-    "../envs/downsampling.yml"
-  resources:
-    mem = "32G",
-    time = "4:00:00"
-  script:
-    "../scripts/main_figure_1_and_2/downsampling_reads_for_UMIs.R"
-
 # Duplicates Analysis
-# Because this analysis requires many rules, most of the analysis was moved to duplicate_pairs_analysis.smk
+# Rules in duplicate_pairs_analysis.smk
 rule find_duplicate_pairs:
   input:
     gasperini_results = "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories.tsv",
