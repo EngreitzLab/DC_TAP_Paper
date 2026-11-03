@@ -8,9 +8,9 @@ output:
     toc_float: true
     code_folding: show
 params:
-  indirect_effects_dir: "../../resources/main_figure_4/indirect_effects"
+  indirect_effects_dir: "../../direct_vs_indirect_effects/compute_direct_vs_indirect_effects/results"
   table_s3_file: "../formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
-  plots_dir: "./plots"
+  outdir: "./plots"
 ---
 
 ```{r setupDocument, include=FALSE}
@@ -43,7 +43,7 @@ $$
 Refer to the "Computing the probability that DE-G pair is a direct versus indirect effect" Methods
 section of the manuscript for more information on this approach. Here we analyze the direct and
 indirect rates in the K562 and WTC11 DC-TAP-seq screens to reproduce the plots shown in **Figure 4**
-and **Figure S3**.
+and **Extended Data Figure 3**.
 
 ***
 
@@ -54,13 +54,15 @@ This analysis uses the output of the
 analysis workflow as input. Probabilities of direct effects for K562 and WTC11 DC-TAP-seq
 experiments calculated by this workflow can be found in Table S3.
 ```{r}
-# output of the CRISPR_indirect_effects workflow (copied into resources/main_figure_4/indirect_effects)
+# output of the direct vs. indirect effects workflow (adjust via params as needed)
 indirect_effects_dir <- params$indirect_effects_dir
 
 # Table S3
 table_s3_file <- params$table_s3_file
-plots_dir <- params$plots_dir
-dir.create(plots_dir, showWarnings = FALSE, recursive = TRUE)
+
+# output directory for generated plots
+outdir <- params$outdir
+dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
 ```
 
 First we load all requied input files from the indirect effects analysis:
@@ -187,48 +189,87 @@ as functions of distance to TSS
 Here we show the overall (direct + indirect) cis hit rate of observed significant DE-gene pairs for
 50kb bins of distance to TSS. The distance to TSS independent indirect effects rates are shown as
 lines.
-```{r cisVsIndirectEffectRate, fig.height=4, fig.width=8}
+
+```{r plotObservedRates}
 # reformat cis hit rates for plot
 cis_rates_plot <- cis_rates %>% 
   select(dataset, mean_dist, positive_rate_negative, positive_rate_positive) %>% 
   pivot_longer(cols = -c(dataset, mean_dist), names_to = "effect_direction",
                values_to = "positive_rate") %>% 
   mutate(cell_type = sub("_DC_TAPseq", "", dataset)) %>% 
-  mutate(effect_direction = str_to_title(sub("positive_rate_", "", effect_direction)))
+  mutate(effect_direction = str_to_title(sub("positive_rate_", "", effect_direction))) %>% 
+  mutate(effect_direction = factor(effect_direction))
 
+# helper function to plot observed hit rates as function of distance to TSS
+plot_observed_rates <- function(observed_rates, ylim) {
+  ggplot(observed_rates, aes(x = mean_dist / 1e6, y = positive_rate, color = cell_type,
+                    shape = effect_direction)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+  geom_point() +
+  labs(title = paste(unique(observed_rates$effect_direction), "effects on expression"), 
+       x = "Distance to TSS (Mb)",
+       y = "Rate of observed effects", color = "Cell type", shape = "Direction of effect") +
+  scale_color_manual(values = c(K562 = "#b00404", WTC11 = "#0202cc")) +  
+  scale_shape_manual(values = c(Negative = 19, Positive = 1), drop = FALSE) +
+  scale_y_continuous(limits = ylim, labels = scales::percent) +
+  theme_classic() +
+  theme(legend.position = "top")
+}
+
+# plot observed hit rates for negative and positive effects on expression as function of distance
+ylim <- c(NA, max(cis_rates_plot$positive_rate))
+p_obs_neg <- plot_observed_rates(filter(cis_rates_plot, effect_direction == "Negative"), ylim = ylim)
+p_obs_pos <- plot_observed_rates(filter(cis_rates_plot, effect_direction == "Positive"), ylim = ylim)
+```
+
+```{r plotIndirectRates}
 # reformat trans hit rates for plot
 trans_rates_plot <- trans_rates %>% 
   select(dataset, positive_rate_negative, positive_rate_positive) %>% 
   pivot_longer(cols = -dataset, names_to = "effect_direction", values_to = "positive_rate") %>% 
   mutate(cell_type = sub("_DC_TAPseq", "", dataset)) %>% 
-  mutate(effect_direction = str_to_title(sub("positive_rate_", "", effect_direction)))  
+  mutate(effect_direction = str_to_title(sub("positive_rate_", "", effect_direction)))
 
-# plot cis hit rates as function of distance to TSS, one panel per effect direction (Fig. 4b). The
-# distance-independent indirect (trans) effect rate is shown at an extra "Other chromosomes" position.
-other_chr_x <- 1.15
-direction_labels <- c(Negative = "Negative effects on expression", Positive = "Positive effects on expression")
-ggplot(cis_rates_plot, aes(x = mean_dist / 1e6, y = positive_rate, color = cell_type, shape = effect_direction)) +
-  facet_wrap(~effect_direction, labeller = labeller(effect_direction = direction_labels)) +
-  geom_hline(yintercept = 0, linetype = "dashed", color = "grey80") +
-  geom_point(size = 2) +
-  geom_point(data = trans_rates_plot, aes(x = other_chr_x), size = 2) +
-  labs(x = "Distance to TSS (Mb)", y = "Rate of observed effects (%)", color = "Cell type",
-       shape = "Direction of effect") +
-  scale_color_manual(values = c(K562 = "#b00404", WTC11 = "#0202cc")) +
-  scale_shape_manual(values = c(Negative = 19, Positive = 1)) +
-  scale_x_continuous(breaks = c(0, 0.25, 0.5, 0.75, 1, other_chr_x),
-                     labels = c("0.00", "0.25", "0.50", "0.75", "1.00", "Other\nchromosomes"),
-                     expand = expansion(mult = c(0.03, 0.12))) +
-  scale_y_continuous(limits = c(0, max(cis_rates_plot$positive_rate)), breaks = seq(0, 0.12, 0.03),
-                     labels = function(x) x * 100) +
-  theme_classic() +
-  theme(strip.background = element_blank(), strip.text = element_text(face = "bold", size = 11),
-        legend.position = "top")
+# helper function to plot indirect effects rates
+plot_indirect_rates <- function(indirect_rates, ylim) {
+  ggplot(indirect_rates, aes(x = "Other\nchromosomes\n(Rate of\nindirect effects)",
+                             y = positive_rate,  color = cell_type, shape = effect_direction)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "gray") +
+    geom_point() +
+    scale_color_manual(values = c(K562 = "#b00404", WTC11 = "#0202cc")) +  
+    scale_shape_manual(values = c(Negative = 19, Positive = 1)) +
+    scale_y_continuous(limits = ylim, labels = scales::percent) +
+    theme_classic() +
+    theme(legend.position = "none", axis.title.x = element_blank(),
+          axis.line.y = element_blank(), axis.title.y = element_blank(),
+          axis.text.y = element_blank(), axis.ticks.y = element_blank())
+}
+
+# plot indirect hit rates for negative and positive effects on expression
+p_ind_neg <- plot_indirect_rates(filter(trans_rates_plot, effect_direction == "Negative"), ylim = ylim)
+p_ind_pos <- plot_indirect_rates(filter(trans_rates_plot, effect_direction == "Positive"), ylim = ylim)
+```
+
+```{r assembleFigure, fig.height=4, fig.width=7}
+# extract legend from one plot
+legend <- get_legend(p_obs_neg)
+
+# arrange all plots
+plots <- plot_grid(
+  p_obs_neg + theme(legend.position = "none"),
+  p_ind_neg, 
+  p_obs_pos + theme(legend.position = "none"),
+  p_ind_pos,
+  nrow = 1, rel_widths = c(1, 0.1, 1, 0.1), align = "h"
+)
+
+# combine legend and plots into one figure
+plot_grid(legend, plots, nrow = 2, rel_heights = c(0.1, 1))
 ```
 
 ```{r savePlot1, echo=FALSE}
 # save plot to pdf
-ggsave(file = file.path(plots_dir, "cis_and_trans_effect_rates.pdf"), height = 4, width = 8)
+ggsave(file = file.path(outdir, "Fig4b_cis_and_trans_effect_rates.pdf"), height = 4, width = 7)
 ```
 
 #### Probability of direct effect
@@ -274,7 +315,7 @@ ggplot(random_pairs_plot, aes(x = dist_to_tss / 1e3, y = direct_vs_indirect, col
 
 ```{r savePlot2, echo=FALSE}
 # save plot to pdf
-ggsave(file = file.path(plots_dir, "probability_direct_vs_indirect.pdf"), height = 4, width = 6)
+ggsave(file = file.path(outdir, "Fig4c_probability_direct_vs_indirect.pdf"), height = 4, width = 6)
 ```
 
 ***
@@ -452,7 +493,8 @@ ggplot(pairs_p90_combined_plot,
 
 ```{r, savePlot3, echo=FALSE}
 # save plot to pdf
-ggsave(file = file.path(plots_dir, "negative_vs_positive_effects_combined.pdf"), height = 4, width = 3.5)
+ggsave(file = file.path(outdir, "Fig4d_negative_vs_positive_effects_combined.pdf"), height = 4,
+       width = 3.5)
 ```
 
 Alternatively, we can also look at this by plotting the observed CRISPR effect size on target gene
@@ -476,7 +518,8 @@ ggplot(random_pairs_hits, aes(x = cell_type, y = log_2_FC_effect_size, color = f
 
 ```{r savePlot4, echo=FALSE}
 # save plot to pdf
-ggsave(file = file.path(plots_dir, "probability_direct_vs_effect_size.pdf"), height = 4, width = 6)
+ggsave(file = file.path(outdir, "ExtData_Fig7_probability_direct_vs_effect_size.pdf"), height = 4,
+       width = 6)
 ```
 
 ***

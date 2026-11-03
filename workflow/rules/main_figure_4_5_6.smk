@@ -1,29 +1,63 @@
 ## Rules to create main Figures 4-6 (and Fig. 3c) from tables in the repository.
 ## These rules have no conda directive: they run in the top-level pixi environment (pixi.toml).
 
-# Figure 4 (and Fig. S3): direct vs indirect effects, from CRISPR_indirect_effects workflow outputs
+# Figure 4b-d and Extended Data Fig. 7: direct vs indirect effects, from the outputs of
+# direct_vs_indirect_effects/compute_direct_vs_indirect_effects (checked into its results/)
 rule main_figure_4_direct_indirect_effects:
   input:
-    rmd = "results/main_figure_4_direct_indirect_effects/dc_tapseq_indirect_effects.Rmd",
-    cis_rates = "resources/main_figure_4/indirect_effects/cis_positive_hit_rates.tsv",
-    trans_rates = "resources/main_figure_4/indirect_effects/trans_positive_hit_rates.tsv",
-    direct_effect_model = "resources/main_figure_4/indirect_effects/direct_effect_models/direct_effects_model.rds",
+    rmd = "results/main_figure_4_and_extdata_figure_7/dc_tapseq_indirect_effects_main_analyses.Rmd",
+    cis_rates = "direct_vs_indirect_effects/compute_direct_vs_indirect_effects/results/cis_positive_hit_rates.tsv",
+    trans_rates = "direct_vs_indirect_effects/compute_direct_vs_indirect_effects/results/trans_positive_hit_rates.tsv",
+    direct_effect_model = "direct_vs_indirect_effects/compute_direct_vs_indirect_effects/results/direct_effect_models/direct_effects_model.rds",
     table_s3 = "results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
   output:
-    html = "results/main_figure_4_direct_indirect_effects/dc_tapseq_indirect_effects.html",
-    rates = "results/main_figure_4_direct_indirect_effects/plots/cis_and_trans_effect_rates.pdf",
-    p_direct = "results/main_figure_4_direct_indirect_effects/plots/probability_direct_vs_indirect.pdf",
-    effect_direction = "results/main_figure_4_direct_indirect_effects/plots/negative_vs_positive_effects_combined.pdf",
-    effect_size = "results/main_figure_4_direct_indirect_effects/plots/probability_direct_vs_effect_size.pdf"
-  log: "results/main_figure_4_direct_indirect_effects/logs/main_figure_4.log"
+    html = "results/main_figure_4_and_extdata_figure_7/dc_tapseq_indirect_effects_main_analyses.html",
+    rates = "results/main_figure_4_and_extdata_figure_7/plots/Fig4b_cis_and_trans_effect_rates.pdf",
+    p_direct = "results/main_figure_4_and_extdata_figure_7/plots/Fig4c_probability_direct_vs_indirect.pdf",
+    effect_direction = "results/main_figure_4_and_extdata_figure_7/plots/Fig4d_negative_vs_positive_effects_combined.pdf",
+    effect_size = "results/main_figure_4_and_extdata_figure_7/plots/ExtData_Fig7_probability_direct_vs_effect_size.pdf"
+  log: "results/main_figure_4_and_extdata_figure_7/logs/main_figure_4.log"
   params:
-    out_dir = "results/main_figure_4_direct_indirect_effects"
+    out_dir = "results/main_figure_4_and_extdata_figure_7"
   shell:
     """
     Rscript -e 'wd <- getwd(); rmarkdown::render("{input.rmd}", output_dir = file.path(wd, "{params.out_dir}"),
       params = list(indirect_effects_dir = file.path(wd, dirname("{input.cis_rates}")),
                     table_s3_file = file.path(wd, "{input.table_s3}"),
-                    plots_dir = file.path(wd, "{params.out_dir}/plots")))' > {log} 2>&1
+                    outdir = file.path(wd, "{params.out_dir}/plots")))' > {log} 2>&1
+    """
+
+# Extended Data Fig. 15: modeled direct and indirect effect rates (same inputs as Fig. 4)
+rule extended_data_figure_15_direct_indirect_rates:
+  input:
+    rmd = "results/extended_data_figure_15/dc_tapseq_indirect_effects_extdata_fig15.Rmd",
+    cis_rates = "direct_vs_indirect_effects/compute_direct_vs_indirect_effects/results/cis_positive_hit_rates.tsv",
+    direct_rates = "direct_vs_indirect_effects/compute_direct_vs_indirect_effects/results/direct_effect_models/direct_rates_per_datasets.tsv",
+    dataset_ids = "direct_vs_indirect_effects/compute_direct_vs_indirect_effects/config/crispr_dataset_ids.tsv"
+  output:
+    html = "results/extended_data_figure_15/dc_tapseq_indirect_effects_extdata_fig15.html",
+    pdf = "results/extended_data_figure_15/ExtData_Fig15_direct_indirect_rates.pdf"
+  log: "results/extended_data_figure_15/logs/extended_data_figure_15.log"
+  shell:
+    """
+    Rscript -e 'rmarkdown::render("{input.rmd}")' > {log} 2>&1
+    """
+
+# Extended Data Fig. 16b,c: indirect effects of DC-TAP-seq vs genome-wide elements and genes
+# (Gasperini et al. 2019). Fig. 16a,d need the per-dataset SCEPTRE outputs of the full workflow
+# (results/extended_data_figure_16/README.md).
+rule extended_data_figure_16bc_genome_wide_indirect_effects:
+  input:
+    rmd = "results/extended_data_figure_16/3_genome_wide_indirect_effects_extdata_fig16bc.Rmd",
+    genes = "direct_vs_indirect_effects/genome_wide_indirect_effects/gasperini2019_indirect_effects_per_gene.tsv.gz",
+    elements = "direct_vs_indirect_effects/genome_wide_indirect_effects/gasperini2019_indirect_effects_per_element.tsv.gz"
+  output:
+    html = "results/extended_data_figure_16/3_genome_wide_indirect_effects_extdata_fig16bc.html",
+    pdf = "results/extended_data_figure_16/ExtData_Fig16bc_indirect_rates_gasperini.pdf"
+  log: "results/extended_data_figure_16/logs/extended_data_figure_16bc.log"
+  shell:
+    """
+    Rscript -e 'rmarkdown::render("{input.rmd}")' > {log} 2>&1
     """
 
 # Figure 5b, 5c,d (with Gasperini et al.) and Figure 3c, from categorized pairs in the repository

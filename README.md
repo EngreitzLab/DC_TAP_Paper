@@ -81,7 +81,7 @@ Supplementary Tables:
   bash workflow/scripts/download_large_inputs_from_zenodo.sh   # large inputs, ~0.5 GB (see below)
   pixi run main-figures      # = workflow/scripts/run_main_figures.sh; ~90 min on 8 cores incl. building conda envs (tested on a fresh clone on Sherlock, 2026-10-29)
   ```
-  Figures 4–6 need only files in the repository and can be made on their own (no conda, ~1 min):
+  Figures 4–6 (and Extended Data Figs. 7, 15, 16b,c) need only files in the repository and can be made on their own (no conda, ~1 min):
   ```
   pixi run snakemake --cores 4 create_main_figures_4_5_6
   ```
@@ -102,14 +102,16 @@ Supplementary Tables:
   | 3a | `compare_effect_sizes_to_other_screens` | `scripts/main_figure_3/` | `results/main_figure_3/compare_effect_sizes_to_other_screens/effect_size_comparison.pdf` |
   | 3b | `power_to_detect_change_for_all_datasets` | `scripts/main_figure_3/` | `results/main_figure_3/power_to_detect_change_for_all_datasets/*.pdf` |
   | 3c | `main_figure_5_chromatin_categories` | `results/main_figure_5_and_6/chromatin_categories_and_power_estimation.R` | `results/main_figure_5_and_6/housekeeping_genes/detected_positives/` |
-  | 4b–d | `main_figure_4_direct_indirect_effects` | `results/main_figure_4_direct_indirect_effects/dc_tapseq_indirect_effects.Rmd` | `results/main_figure_4_direct_indirect_effects/plots/` |
+  | 4b–d, ED 7 | `main_figure_4_direct_indirect_effects` | `results/main_figure_4_and_extdata_figure_7/dc_tapseq_indirect_effects_main_analyses.Rmd` | `results/main_figure_4_and_extdata_figure_7/plots/` |
   | 5b | `main_figure_5_chromatin_categories` | `results/main_figure_5_and_6/chromatin_categories_and_power_estimation.R` | `results/main_figure_5_and_6/categorized_pairs/proportion_by_cell_type.element_category.de_weighted.combine_dc_tap.pdf` |
   | 5c,d | `main_figure_5_chromatin_categories`, `main_figure_5_housekeeping_genes` | `chromatin_categories_and_power_estimation.R`, `housekeeping_genes.R` | `results/main_figure_5_and_6/{housekeeping_genes,hkg_comparison}/` |
   | 6a–d | `main_figure_6_model_scores` | `results/main_figure_5_and_6/model_scores.R` | `results/main_figure_5_and_6/e2g_model_scores/ENCODE_rE2G/` (ABC and AlphaGenome for Extended Data Fig. 13 in sibling folders) |
+  | ED 15 | `extended_data_figure_15_direct_indirect_rates` | `results/extended_data_figure_15/dc_tapseq_indirect_effects_extdata_fig15.Rmd` | `results/extended_data_figure_15/ExtData_Fig15_direct_indirect_rates.pdf` |
+  | ED 16b,c | `extended_data_figure_16bc_genome_wide_indirect_effects` | `results/extended_data_figure_16/3_genome_wide_indirect_effects_extdata_fig16bc.Rmd` | `results/extended_data_figure_16/ExtData_Fig16bc_indirect_rates_gasperini.pdf` |
 
-  Panels 1a,b, 2a, 4a and 5a are schematics, and 2g is a genome-browser view.
+  Panels 1a,b, 2a, 4a and 5a are schematics, and 2g is a genome-browser view. Extended Data Fig. 16a,d need the per-dataset SCEPTRE outputs of the direct vs. indirect effects workflow and are run by hand (`results/extended_data_figure_16/README.md`).
 - Inputs to Figures 4–6 come from other pipelines and are checked in as derived tables:
-  - `resources/main_figure_4/indirect_effects/`: output of [CRISPR_indirect_effects](https://github.com/EngreitzLab/CRISPR_indirect_effects) (cis/trans hit rates and the direct-effect model)
+  - `direct_vs_indirect_effects/compute_direct_vs_indirect_effects/results/`: output of the direct vs. indirect effects workflow (cis/trans hit rates, direct-effect rates and the fitted direct-effect model; see **Direct vs. indirect effect analyses** below)
   - `resources/main_figure_6/expt_pred_merged_annot.txt.gz`: output of the [CRISPR_comparison](https://github.com/EngreitzLab/CRISPR_comparison) benchmarking pipeline for DC-TAP-seq pairs
   - `results/main_figure_5_and_6/categorized_pairs/`: chromatin-categorized CRISPR pairs. These are built from the chromatin annotations and ENCODE-rE2G predictions described in the Methods (ENCODE accessions are listed in the Supplementary Tables); Figs 5 and 6 are reproduced from these tables and Table S3. The upstream categorization can be re-run with `chromatin_categories_and_power_estimation.R categorize` given those annotation outputs.
 - CellRanger outputs are available from NCBI GEO under accession `GSE303901` (see **Data and code availability** below); download them into `resources/process_validation_datasets/{K562,WTC11}_DC_TAP_Seq/cell_ranger_output/` to run `sceptre_setup.smk` from scratch.
@@ -177,6 +179,24 @@ The only external file needed is the GENCODE annotation, which the first command
    ```
 
 **Expected output:** `results/process_validation_datasets/K562_DC_TAP_Seq/differential_expression/results_run_discovery_analysis.rds` — a SCEPTRE results object with one row per tested element–gene pair (test statistic, p-value, and log2 fold-change)
+
+## Direct vs. indirect effect analyses
+
+All output files for the direct vs. indirect effects analyses can be generated via separate
+workflows in the `direct_vs_indirect_effects` directory:
+
+**compute_direct_vs_indirect_effects**
+Snakemake workflow to compute estimate indirect effects rates in CRISPR datasets, fit direct effects
+models and calculate probabilities of direct effects. All required input files are downloaded by the
+workflow from Zenodo or are generated by the main workflow described above.
+
+**genome_wide_indirect_effects**
+Code to compute genome-wide indirect effects for the Gasperini et al., 2019 K562 datasets shown in 
+Extended Data Fig. 16b,c.
+
+**Direct vs. indirect effects analyses scripts**
+Analysis scripts to generate manuscirpt figures are provided in the `results` subdirectories
+corresponding to individual figures.
 
 ## License
 

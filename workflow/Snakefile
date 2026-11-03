@@ -57,10 +57,12 @@ rule create_main_figure_3:
   output:
     touch("results/main_figure_3/create_main_figure_3.done")
     
-# Main Figures 4-6 (and Fig. 3c), from tables in the repository
+# Main Figures 4-6 (and Fig. 3c; Extended Data Figs. 7, 15, 16b,c), from tables in the repository
 rule create_main_figures_4_5_6:
   input:
     rules.main_figure_4_direct_indirect_effects.output,
+    rules.extended_data_figure_15_direct_indirect_rates.output,
+    rules.extended_data_figure_16bc_genome_wide_indirect_effects.output,
     rules.main_figure_5_chromatin_categories.output,
     rules.main_figure_5_housekeeping_genes.output,
     rules.main_figure_6_model_scores.output,

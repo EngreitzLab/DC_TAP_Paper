@@ -1,0 +1,61 @@
+
+# set rule order for different cis results processing scripts
+ruleorder: annotate_cis_results_dctap > annotate_cis_results_encode
+
+configfile: "config/config.yml"
+include: "rules/compute_indirect_effects_rate.smk"
+include: "rules/calculate_direct_vs_effects.smk"
+
+# perform all analyses
+rule all:
+  input:
+    expand("results/{sample}/analyze_indirect_effects.html", sample = config["datasets"]),
+    expand("results/{type}_positive_hit_rates.tsv", type = ["cis", "trans"]),
+    "results/model_indirect_effects.html",
+    "results/direct_effect_models/direct_effects_model.rds",
+    "results/direct_effect_models/direct_rates_average_across_datasets.tsv",
+    "results/direct_effect_models/direct_rates_per_datasets.tsv",
+    "results/annotated_crispr_data/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_fdr20_direct_effects.tsv"
+
+## Helper rules ------------------------------------------------------------------------------------
+
+# download required file from zenodo
+rule download_zenodo:
+  output:
+    "resources/Gasperini2019_cis_positive_rate_0.13gStd_MAST_perCRE_GRCh38.tsv",
+    "resources/Gasperini2019_trans_positive_rate_0.13gStd_MAST_perCRE_GRCh38.tsv",
+    "resources/Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_fdr20.tsv.gz",
+    "resources/gencode.v29.annotation.gtf.gz",
+    "resources/Klann2021_sceptre_diffex_input.rds",
+    "resources/Klann2021_results_run_discovery_analysis.rds",
+    "resources/ENCODE_Klann2021_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
+    "resources/Xie2019_sceptre_diffex_input.rds",
+    "resources/Xie2019_results_run_discovery_analysis.rds",
+    "resources/ENCODE_Xie2019_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
+    "resources/Morris2023_v1_sceptre_diffex_input.rds",
+    "resources/Morris2023_v1_results_run_discovery_analysis.rds",
+    "resources/ENCODE_Morrisv1_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
+    "resources/Morris2023_v2_sceptre_diffex_input.rds",
+    "resources/Morris2023_v2_results_run_discovery_analysis.rds",
+    "resources/ENCODE_Morrisv2_0.13gStd_Sceptre_perCRE_GRCh38.tsv.gz",
+  params:
+    download_url = config["zenodo_url"]
+  conda: "envs/sceptre.yml"
+  shell:
+    """
+    curl -fsSL "{params.download_url}" | tar -xzf - -C resources --strip-components=1
+    """
+  
+# combine positive hit rates of held-out and training datasets
+rule combine_positive_hit_rates:
+  input:
+    cis_rates_heldout = expand("results/{sample}/cis_positive_rate.tsv", sample = config["datasets"]),
+    trans_rates_heldout = expand("results/{sample}/trans_positive_rate.tsv", sample = config["datasets"]),
+    cis_rates_training = config["Gasperini2019"]["cis_rates"],
+    trans_rates_training = config["Gasperini2019"]["trans_rates"]
+  output:
+    cis_rates = "results/cis_positive_hit_rates.tsv",
+    trans_rates = "results/trans_positive_hit_rates.tsv"
+  conda: "envs/sceptre.yml"
+  script:
+    "scripts/combine_positive_hit_rates.R"
