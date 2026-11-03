@@ -4,7 +4,7 @@ Code to analyze the K562 and WTC11 DC-TAP-seq CRISPRi screens and to make the fi
 
 > Ray et al. *A systematic survey of distal element-gene regulatory interactions with Direct-Capture Targeted Perturb-seq.* [bioRxiv 10.1101/2025.09.16.676677](https://www.biorxiv.org/content/10.1101/2025.09.16.676677v2)
 
-Release used for the paper: `v2.0.0`.
+Release used for the paper: `v2.0.0` (Zenodo [10.5281/zenodo.23924968](https://doi.org/10.5281/zenodo.23924968)).
 
 ## Data
 
