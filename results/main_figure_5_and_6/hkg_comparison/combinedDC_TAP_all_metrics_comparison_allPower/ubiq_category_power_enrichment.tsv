@@ -1,0 +1,3 @@
+Dataset	category	n_tested	n_powered	n_tested_category	n_powered_category	prop_tested	prop_pos	enrichment	enrichment_label	SE_log_enr	CI_enr_low	CI_enr_high	p_enr	p_adjust_enr	sign_label	significance
+DC_TAP	Other gene	9666	4856	5644	2458	0.583902338092282	0.506177924217463	0.866887989986888	0.87	0.0142477853385265	0.843014897354736	0.89143713775592	1	1	""	Regulated
+DC_TAP	Ubiq. expr. gene	9666	4856	4022	2398	0.416097661907718	0.493822075782537	1.18679368088364	1.19	0.0146738856295273	1.15314731240818	1.22142177831897	2.70167565065965e-19	5.40335130131931e-19	***	Regulated
