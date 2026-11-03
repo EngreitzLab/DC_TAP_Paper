@@ -26,9 +26,11 @@ message("Loading input files")
 screen_results <- read_tsv(snakemake@input$screen_results)
 
 # Filter for Random_DistalElement_Gene
+# significance and power from the final calls (FDR 20%, positive controls excluded)
 results_with_element_gene_pair_categories_modified <- screen_results %>% 
-  filter(significant_wo_pos_controls | power_at_effect_size_15_wo_pos_controls >= 0.8) %>%
-  filter(Random_DistalElement_Gene)
+  filter(Random_DistalElement_Gene) %>%
+  mutate(significant = significant_wo_pos_controls_20fdr) %>%
+  filter(significant | power_at_effect_size_15_wo_pos_controls_20fdr >= 0.8)
 
 
 ###  Doing Thing =========================================================

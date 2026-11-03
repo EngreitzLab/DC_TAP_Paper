@@ -4,8 +4,7 @@ Reproducible pipeline characterizing DC-TAP-seq **positive** distal elements by
 their overlap with the full ENCODE catalog of transcription-factor and
 histone-mark ChIP-seq peaks, in **K562** and **WTC11**, on **hg38 / GRCh38**.
 
-This addresses the reviewer request to extend the manuscript's chromatin
-characterization (which used H3K27ac, H3K27me3, CTCF) to the complete set of
+This extends the chromatin characterization (H3K27ac, H3K27me3, CTCF) to all
 ENCODE-profiled TFs and additional histone marks.
 
 ## What the pipeline does
@@ -129,7 +128,7 @@ See `scripts/README_download.md` for details on the ENCODE curation and download
                                                              effect sign; H3K27ac/H3K27me3/CTCF columns
                                                              pinned far left; two left strips =
                                                              element_category color + <100 kb-to-TSS flag
-    report.html                                               self-contained report (incl. draft reviewer reply)
+    report.html                                               self-contained report
 
 All figures are additionally written as vector **.pdf** with editable text
 alongside the .png shown above.
@@ -199,9 +198,8 @@ appear in `encode_excluded_audit.csv` with reason "WTC11 data available for this
 target". Of the 168 WTC11-arm targets, 93 have native WTC11 data (87 TF ChIP-seq
 + 6 Mint-ChIP-seq histone marks: H3K27ac, H3K27me3, H3K4me1, H3K4me3, H3K9me3,
 H3K36me3) and 75 are H1/H9-only (53 TF + 22 histone marks not natively assayed
-in WTC11). 16 targets (ATF2, ATF3, CREB1, CTCF, JUN, MAX, SP1, TEAD4, USF1,
-USF2, and the 6 histone marks above) previously mixed WTC11 with H1/H9 and now
-use WTC11 only (66 H1/H9 files dropped). This keeps the pooled overlaps
+in WTC11). For 16 targets with both (ATF2, ATF3, CREB1, CTCF, JUN, MAX, SP1, TEAD4, USF1,
+USF2, and the 6 histone marks above) only the WTC11 files are used. This keeps the pooled overlaps
 consistent with the manuscript's WTC11-specific `element_category`, so a site is
 not called bound on the basis of ESC-line data when a native WTC11 experiment
 exists.

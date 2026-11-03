@@ -52,7 +52,7 @@ guides_of_interest <- wtc11_singleton_results %>%
   filter(grna_id %in% guide_ids) %>%
   mutate(
     pct_change_effect_size = 100*(2^log_2_fold_change - 1),
-    group = "chr12:8113272-8113573"  # Add group column
+    group = "chr12:7960676-7960977"  # Add group column
   )
 
 # Filter for negative control guides tested against gene of interest
@@ -68,7 +68,7 @@ neg_guides <- wtc11_calibration_check_results %>%
 message("Preparing data for plotting")
 # Create a data frame for the bar plot showing means and CIs
 bar_data <- tibble(
-  group = c("chr12:8113272-8113573", "non-targeting"),
+  group = c("chr12:7960676-7960977", "non-targeting"),
   mean_effect = c(
     pair_of_interest$pct_change_effect_size, 
     neg_of_interest$pct_change_effect_size
@@ -91,7 +91,7 @@ all_guides <- bind_rows(guides_of_interest, neg_guides)
 
 message("Creating barplot with significance coloring")
 # Set custom colors for groups and significance
-group_colors <- c("chr12:8113272-8113573" = "#F8766D", "non-targeting" = "#00BFC4")
+group_colors <- c("chr12:7960676-7960977" = "#F8766D", "non-targeting" = "#00BFC4")
 sig_colors <- c("TRUE" = "black", "FALSE" = "gray70")
 
 # Create the barplot

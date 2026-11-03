@@ -1,3 +1,8 @@
+# Chromatin categories (Fig. 5b), promoter-class comparisons with Gasperini et al. (Fig. 5c,d) and
+# detected vs undetected significant pairs by effect size (Fig. 3c)
+script_dir <- dirname(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)))
+source(file.path(script_dir, "housekeeping_gene_plot_functions.R"))  # also loads packages
+
 ### --- DEFINE CHROMATIN CATEGORIES ---
 # get thresholds based on genome-wide elements
 get_category_thresholds <- function(enh, quantiles) {
@@ -422,12 +427,25 @@ read_enh_lists <- function(file_path, remove_promoters) {
 
 
 ### --- DEFINE FILE PATHS AND PARAMS ---
+# usage (from the repository root):
+#   Rscript chromatin_categories_and_power_estimation.R plot [results_dir]
+#       plots Fig. 3c, Fig. 5b-d and associated supplementary figures from the categorized pairs in
+#       results/main_figure_5_and_6/categorized_pairs
+#   Rscript chromatin_categories_and_power_estimation.R categorize [results_dir] [large_inputs_dir]
+#       first re-creates the categorized pairs from the chrom-annotate, direct-effect and ENCODE-rE2G
+#       outputs in large_inputs_dir
+args <- commandArgs(trailingOnly = TRUE)
+mode <- if (length(args) >= 1) args[1] else "plot"
+results_dir <- if (length(args) >= 2) args[2] else "results/main_figure_5_and_6"
+large_inputs_dir <- if (length(args) >= 3) args[3] else "large_inputs/main_figure_5"
+stopifnot(mode %in% c("plot", "categorize"))
+dir.create(results_dir, showWarnings = FALSE, recursive = TRUE)
 
 # download from: https://github.com/EngreitzLab/ENCODE_rE2G/blob/dev/resources/external_features/gene_promoter_class_RefSeqCurated.170308.bed.CollapsedGeneBounds.hg38.TSS500bp.tsv
-promoter_class_path <- "ENCODE_rE2G/resources/external_features/gene_promoter_class_RefSeqCurated.170308.bed.CollapsedGeneBounds.hg38.TSS500bp.tsv"
+promoter_class_path <- file.path(large_inputs_dir, "ENCODE_rE2G/resources/external_features/gene_promoter_class_RefSeqCurated.170308.bed.CollapsedGeneBounds.hg38.TSS500bp.tsv")
 
 # download from: https://github.com/EngreitzLab/ENCODE_rE2G/blob/dev/reference/CollapsedGeneBounds.hg38.TSS500bp.bed"
-abc_genes_path <- "ENCODE_rE2G/reference/CollapsedGeneBounds.hg38.TSS500bp.bed"
+abc_genes_path <- file.path(large_inputs_dir, "ENCODE_rE2G/reference/CollapsedGeneBounds.hg38.TSS500bp.bed")
 
 ## inputs for combining all annotations
 # parameters for categorization
@@ -436,7 +454,7 @@ quantiles <- c(0.1, 0.25, 0.3, 0.35, 0.4, 0.5, 0.6, 0.7, 0.75, 0.85, 0.9, 0.95)
 cell_types <- c("K562", "GM12878", "HCT116", "Jurkat", "WTC11")
 
 # results from chrom-annotate pipeline
-chrom_annotate_results <- "chrom_annotate_results"
+chrom_annotate_results <- file.path(large_inputs_dir, "chrom_annotate_results")
 enh_lists <- c(file.path(chrom_annotate_results, cell_types, "EnhancerList.extended.tsv"))
 names(enh_lists) <- cell_types
 
@@ -444,25 +462,26 @@ crispr_annot_files <- c(other_crispr = file.path(chrom_annotate_results, "CRISPR
     dc_tap_gasperini = file.path(chrom_annotate_results, "CRISPR_data", "dc_tap_gasperini.random_distal_element_pairs.tsv"))
 
 # results from direct effect rate annotations
-direct_effect_results <- "direct_effect_results"
-crispr_annot_files <- c(other_crispr = file.path(direct_effect_results, "other_crispr_screens.direct_effect.tsv.gz")
+direct_effect_results <- file.path(large_inputs_dir, "direct_effect_results")
+direct_effect_files <- c(other_crispr = file.path(direct_effect_results, "other_crispr_screens.direct_effect.tsv.gz"),
     dc_tap_gasperini = file.path(direct_effect_results, "dc_tap_gasperini.random_distal_element_pairs.direct_effect.tsv.gz"))
 
 # results from encode_re2g pipeline to get all candidate element-gene pairs
-e2g_base <- "ENCODE_rE2G_results"
+e2g_base <- file.path(large_inputs_dir, "ENCODE_rE2G_results")
 e2g_res <- c(GM12878 = "2025_0227_validation_new_inputs", HCT116 = "2025_0227_validation_new_inputs", K562 = "2025_0227_validation_new_inputs",
     Jurkat = "2025_0227_validation_new_inputs", WTC11 = "2025_0227_validation_new_inputs")
 e2g_files <- lapply(cell_types, function(ct) file.path(e2g_base, e2g_res[ct], paste0(ct, "_H3K27ac_megamap"),
                                                 "dhs_h3k27ac_megamap", "encode_e2g_predictions.tsv.gz")) %>% unlist() %>% setNames(cell_types)
 
 ## categorized pairs file paths 
-recat_dir <- file.path("categorized_pairs")
+recat_dir <- file.path(results_dir, "categorized_pairs")
 crispr_encode_categorized_file <- file.path(recat_dir, "other_crispr_screens.categorized.tsv.gz")
 crispr_sceptre_categorized_file <- file.path(recat_dir, "dc_tap_gasperini.random_distal_element_pairs.categorized.tsv.gz")
 thresholds_file <- file.path(recat_dir, "thresholds.tsv")
 
 
 ### --- ANNOTATE DATA WITH CHROMATIN CATEGORIES ---
+if (mode == "categorize") {
 enh <- lapply(enh_lists, read_enh_lists, remove_promoters) %>% 
     rbindlist(idcol = "cell_type") %>% as.data.frame() %>%
     mutate(CTCF.H3K27ac.ratio = (CTCF.RPM) / (H3K27ac.RPM + 0.001)) %>% 
@@ -485,7 +504,7 @@ fwrite(crispr_sceptre, crispr_sceptre_categorized_file, sep = "\t", quote = FALS
 other_crispr <- other_crispr %>% 
         categorize_elements(thresholds, H3K27ac_q_high = 0.9, H3K27ac_q_low = 0.5) %>% 
         mutate(ubiq_category = ifelse(measuredGeneSymbol %in% ubiq_expr_genes, "Ubiq. expr. gene", "Other gene"))
-fwrite(crispr_encode, crispr_encode_categorized_file, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
+fwrite(other_crispr, crispr_encode_categorized_file, sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 message("Categorized CRISPR data!")
 
 enh_cat <- enh %>% 
@@ -497,6 +516,18 @@ enh_pairs_cat <- annotate_genomewide_pairs(enh_cat, e2g_files, cell_types, remov
 gw_pairs <- enh_pairs_cat[[1]]
 fwrite(gw_pairs, file.path(recat_dir, "all_gw_pairs.categorized.summary.tsv"), sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE)
 message("Categorized genome-wide pairs!")
+}
+
+# read categorized pairs (re-created above in "categorize" mode, otherwise taken from the repository)
+crispr_sceptre <- fread(crispr_sceptre_categorized_file, sep = "\t")
+
+# DC-TAP-seq pairs: use the final calls in Table S3 (FDR 20%, positive controls excluded) instead of
+# the earlier DC-TAP-seq rows in the categorized pairs file; keep Gasperini et al. pairs from that file
+table_s3_file <- "results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
+dc_tap_table_s3 <- read_dc_tap_table_s3(table_s3_file, filter_to_random_DEG = TRUE) %>%
+    rename_with(~ sub("_wo_pos_controls_20fdr$", "", .x), starts_with("power_at"))
+crispr_sceptre <- bind_rows(filter(crispr_sceptre, Dataset == "Gasperini2019"), dc_tap_table_s3)
+gw_pairs <- fread(file.path(recat_dir, "all_gw_pairs.categorized.summary.tsv"), sep = "\t")
 
 ### --- PLOT CHROMATIN CATEGORY PROPORTIONS ---
 crispr_sceptre_use <- crispr_sceptre %>%
@@ -509,7 +540,7 @@ z <- plot_category_proportion_by_dataset_sceptre(gw_pairs, crispr_sceptre_use, "
     ggsave(file.path(recat_dir, "proportion_by_cell_type.element_category.de_weighted.for_dc_tap.pdf"), z, height = 6, width = 8)
 
 # DC-TAP combined (Fig. 5b)
-crispr_dc_combined <- crispr_sceptre %>%
+crispr_dc_combined <- crispr_sceptre_use %>%
     mutate(Dataset = ifelse(Dataset %in% c("K562_DC_TAP", "WTC11_DC_TAP"), "DC_TAP", Dataset)) %>% 
     mutate(cell_type = ifelse(Dataset == "DC_TAP", "K562_WTC11", cell_type))
 gw_k562 <- gw_pairs %>% filter(cell_type == "K562")    
@@ -521,7 +552,7 @@ ggsave(file.path(recat_dir, "proportion_by_cell_type.element_category.de_weighte
 
 
 ### -- COMPUTE RESULTS BY PROMOTER CLASS (Fig. 5c,d) ---
-this_results_dir <- "housekeeping_genes"
+this_results_dir <- file.path(results_dir, "housekeeping_genes"); dir.create(this_results_dir, showWarnings = FALSE)
 crispr_sceptre_use <- crispr_sceptre %>%
     mutate(Dataset = ifelse(Dataset %in% c("K562_DC_TAP", "WTC11_DC_TAP"), "DC_TAP", Dataset)) %>% 
     mutate(EffectSize = EffectSize * 100) %>% 
@@ -538,31 +569,43 @@ for (use_allpower in c(TRUE, FALSE)){
 
     # direct effect weighted
     out_prefix <- paste0(out_dir, "/weighted_"); out_prefix2 <- paste0(out_dir2, "/weighted_")
-    plot_percent_positive_enrichment_effect_size_combined(crispr = crispr_merged, group_var = g, out_prefix = out_prefix, all_power = use_allpower,
+    plot_percent_positive_enrichment_effect_size_combined(crispr = crispr_sceptre_use, group_var = group_var, out_prefix = out_prefix, all_power = use_allpower,
         direct_effect_weighted = TRUE, direct_effect_threshold = NULL)
-    compare_metrics_across_groups(crispr = crispr_merged, group_var = g, out_prefix = out_prefix2, pairs = "Category", all_power = use_allpower,
+    compare_metrics_across_groups(crispr = crispr_sceptre_use, group_var = group_var, out_prefix = out_prefix2, pairs = "Category", all_power = use_allpower,
         direct_effect_weighted = TRUE, direct_effect_threshold = NULL)
 
     # direct effect filtered
     out_prefix <- paste0(out_dir, "/filter50_"); out_prefix2 <- paste0(out_dir2, "/filter50_")
-    plot_percent_positive_enrichment_effect_size_combined(crispr = crispr_merged, group_var = g, out_prefix = out_prefix, all_power = use_allpower,
+    plot_percent_positive_enrichment_effect_size_combined(crispr = crispr_sceptre_use, group_var = group_var, out_prefix = out_prefix, all_power = use_allpower,
         direct_effect_weighted = FALSE, direct_effect_threshold = 0.5)
-    compare_metrics_across_groups(crispr = crispr_merged, group_var = g, out_prefix = out_prefix2, pairs = "Category", all_power = use_allpower,
+    compare_metrics_across_groups(crispr = crispr_sceptre_use, group_var = group_var, out_prefix = out_prefix2, pairs = "Category", all_power = use_allpower,
         direct_effect_weighted = FALSE, direct_effect_threshold = 0.5)
 
     # no adjustments for p(direct)
     out_prefix <- paste0(out_dir, "/"); out_prefix2 <- paste0(out_dir2, "/")
-    plot_percent_positive_enrichment_effect_size_combined(crispr = crispr_merged, group_var = g, out_prefix = out_prefix, all_power = use_allpower,
+    plot_percent_positive_enrichment_effect_size_combined(crispr = crispr_sceptre_use, group_var = group_var, out_prefix = out_prefix, all_power = use_allpower,
         direct_effect_weighted = FALSE, direct_effect_threshold = 0)
-    compare_metrics_across_groups(crispr = crispr_merged, group_var = g, out_prefix = out_prefix2, pairs = "Category", all_power = use_allpower,
+    compare_metrics_across_groups(crispr = crispr_sceptre_use, group_var = group_var, out_prefix = out_prefix2, pairs = "Category", all_power = use_allpower,
         direct_effect_weighted = FALSE, direct_effect_threshold = 0)
 }
 
 ### --- ESTIMATE UNDETECTED VS DETECTED SIGNIFICANT POSITIVES ---
 this_out <- file.path(this_results_dir, "detected_positives"); dir.create(this_out, showWarnings = FALSE)
 out_prefix <- paste0(this_out, "/5_10_")
-es_bins <- c("<=5%", "(5%, 10%]", "(10%, 15%]", "(15%, 25%]", "(25%, 50%]", "(50%, Inf)")
-bin_min <- c(0, 5, 10, 15, 25, 50); names(bin_min) <- es_bins
-bin_max <- c(5, 10, 15, 25, 50, Inf); names(bin_max) <- es_bins        
-plot_positives_by_effect_size(crispr_sceptre, es_bins, bin_min, bin_max, "Regulated", out_prefix)
+es_bins <- c("<=5%", "(5%, 10%]", "(10%, 15%]", "(15%, 20%]", "(20%, 25%]", "(25%, 50%]", "(50%, Inf)")
+bin_min <- c(0, 5, 10, 15, 20, 25, 50); names(bin_min) <- es_bins
+bin_max <- c(5, 10, 15, 20, 25, 50, Inf); names(bin_max) <- es_bins
+# Fig. 3c: effect size bins are in %, both DC-TAP-seq screens are combined, and Gasperini et al.
+# pairs come from the reprocessed Gasperini results also used for Fig. 3a,b (FDR 20%, positive controls excluded)
+gasperini_results_file <- "results/main_figure_1_and_2/duplicate_pairs_analysis/results_with_element_gene_pair_categories_wo_pos_controls.tsv"
+gasperini_detected <- fread(gasperini_results_file, sep = "\t") %>%
+    filter(DistalElement_Gene == TRUE) %>%
+    transmute(Dataset = "Gasperini2019", EffectSize = pct_change_effect_size,
+        Regulated = significant_wo_pos_controls_20fdr & pct_change_effect_size < 0,
+        across(ends_with("_wo_pos_controls_20fdr") & starts_with("power_at_effect_size_"), .names = "{sub('_wo_pos_controls_20fdr$', '', .col)}"))
+dc_tap_detected <- crispr_sceptre %>%
+    filter(Dataset %in% c("K562_DC_TAP", "WTC11_DC_TAP")) %>%
+    transmute(Dataset = "all_DC_TAP", EffectSize = EffectSize * 100, Regulated, across(starts_with("power_at_effect_size_")))
+crispr_detected <- bind_rows(gasperini_detected, dc_tap_detected)
+plot_positives_by_effect_size(crispr_detected, es_bins, bin_min, bin_max, "Regulated", out_prefix)
 

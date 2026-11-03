@@ -1,0 +1,375 @@
+---
+title: "Model direct vs. indirect effects"
+author: "Andreas R. Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setupDocument, include=FALSE}
+# save.image("analyze_direct_vs_indirect.rda")
+# stop()
+
+# set output html chunk options
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+# set random seed
+set.seed(snakemake@params$seed)
+```
+
+## Goal
+Analyze direct vs. indirect effects across datasets and plot modeled direct effect rates.
+```{r requiredPackages, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(cowplot)
+```
+
+***
+
+## Used data
+Estimated cis and trans effect rates, as well as predicted direct rates and probability of direct vs
+indirect effects are used.
+```{r}
+# load cis and trans effect rates
+cis_rates <- read_tsv(snakemake@input$cis_rates, show_col_types = FALSE)
+trans_rates <- read_tsv(snakemake@input$trans_rates, show_col_types = FALSE)
+
+# load direct effect rates per dataset and averaged across datasets
+direct_rates_datasets <- read_tsv(snakemake@input$direct_rates_datasets, show_col_types = FALSE)
+direct_rates_average  <- read_tsv(snakemake@input$direct_rates_average, show_col_types = FALSE)
+
+# load direct effect models
+models <- readRDS(snakemake@input$models)
+
+# load dataset ids
+dataset_ids <- read_tsv(snakemake@input$dataset_ids, show_col_types = FALSE)
+
+# add dataset ids to use in plots to cis, trans and direct rates
+dataset_ids_rates <- select(dataset_ids, dataset, dataset_plots)
+cis_rates <- left_join(cis_rates, dataset_ids_rates, by = "dataset")
+trans_rates <- left_join(trans_rates, dataset_ids_rates, by = "dataset")
+direct_rates_datasets <- left_join(direct_rates_datasets, dataset_ids_rates, by = "dataset")
+```
+
+***
+
+## Cis and trans positive rates
+Plot cis positive hit rates as function of distance to TSS and trans positive rates for each dataset
+and all effect direction type (negative, positive, all).
+```{r}
+# function to plot cis and trans rates for one effect direction
+plot_cis_trans_rates <- function(cis_rates, trans_rates, effect_direction, log = FALSE) {
+  
+  # get y axis limits
+  ylim <- c(0, max(cis_rates$hit_rate))
+  
+  # get cis and trans rate for effect direction plot
+  cis_rates <- filter(cis_rates, effect_direction == .env$effect_direction)
+  trans_rates <- filter(trans_rates, effect_direction == .env$effect_direction)
+
+  # make plot
+  p <- ggplot(cis_rates, aes(x = mean_dist / 1e6, y = hit_rate, color = dataset_plots)) +
+    geom_point() +
+    geom_hline(data = trans_rates, aes(yintercept = hit_rate, color = dataset_plots)) +
+    labs(title = str_to_sentence(paste(effect_direction, "effects")), x = "Distance to TSS (Mb)",
+         y = "Positive hit rate", color = "Dataset") +
+    scale_y_continuous(limits = ylim) +
+    theme_bw()
+  
+  # log transform axes if specified else just print plot
+  if (log == TRUE) {
+    p <- p + 
+      scale_x_log10() +
+      scale_y_log10(limits = c(NA, ylim[[2]]))
+  }
+  
+  return(p)
+  
+}
+```
+
+```{r}
+# filter cis rates based on specified maximum distance and convert to long format for plotting
+cis_rates_plot <- cis_rates %>% 
+  filter(mean_dist <= snakemake@params$max_distance) %>% 
+  select(dataset_plots, mean_dist, all = positive_rate_significant, negative = positive_rate_negative,
+         positive = positive_rate_positive) %>% 
+  pivot_longer(cols = -c(dataset_plots, mean_dist), names_to = "effect_direction", values_to = "hit_rate")
+
+# convert trans rates to ling format for plotting
+trans_rates_plot <- trans_rates %>% 
+  select(dataset_plots, all = positive_rate_significant, negative = positive_rate_negative,
+         positive = positive_rate_positive) %>% 
+  pivot_longer(cols = -dataset_plots, names_to = "effect_direction", values_to = "hit_rate")
+```
+
+```{r, fig.width=9, fig.height=7}
+# create plots for all effect size directions
+hit_rate_plots <- lapply(unique(cis_rates_plot$effect_direction), FUN = plot_cis_trans_rates,
+       cis_rates = cis_rates_plot, trans_rates = trans_rates_plot)
+
+# arrange into one figure
+plot_grid(
+  hit_rate_plots[[1]] + theme(legend.position = "none"),
+  hit_rate_plots[[2]] + theme(legend.position = "none"),
+  hit_rate_plots[[3]] + theme(legend.position = "none"),
+  get_legend(hit_rate_plots[[1]]),
+  nrow = 2, ncol = 2)
+```
+
+Plot effect rates in log space. Note that this introduces infinite values in the cis hit rates
+because some distance bins have no positives due to overall data sparsity.
+
+```{r, fig.width=9, fig.height=7}
+# create plots for all effect size directions
+rate_types <- unique(cis_rates_plot$effect_direction)
+names(rate_types) <- rate_types
+hit_rate_plots <- lapply(rate_types, FUN = plot_cis_trans_rates, cis_rates = cis_rates_plot,
+                         trans_rates = trans_rates_plot, log = TRUE)
+
+# arrange into one figure
+plot_grid(
+  hit_rate_plots[[1]] + theme(legend.position = "none"),
+  hit_rate_plots[[2]] + theme(legend.position = "none"),
+  hit_rate_plots[[3]] + theme(legend.position = "none"),
+  get_legend(hit_rate_plots[[1]]),
+  nrow = 2, ncol = 2)
+```
+
+***
+
+## Model direct effect rate
+The cis positive hit rate is a combination of the direct and indirect hit rate. The expected
+indirect hit rate in these CRISPR experiments was estimated by the trans positive hit rate. We can
+now calculate the estimated direct effect hit rates by subtracting the indirect effects rate
+(trans hit rate) from the cis positive hit rate for each distance bin.
+
+Some distance bins do have a lower (or 0) cis hit rate in some datasets due to the overall sparsity
+of positive hits in these experiments. Thus the resulting negative direct hit rate will can be
+considered an artifact.
+
+To model the direct hit rate as a function of distance to TSS, we average the calculated direct
+effects hit rate across all dataset per distance bin and fit a powerlaw model. The following plots
+show the powerlaw fit visualized on the direct effect hit rates per individual dataset and averaged
+across dataset (the fit is always from the averaged rates).
+```{r}
+# plot direct effects model fit
+plot_powerlaw_model_fit <- function(rate_type = c("all", "negative", "positive"),
+                                    models, direct_rates_average, direct_rates_datasets,
+                                    log = FALSE, ylim = NA) {
+  
+  rate_type <- match.arg(rate_type)
+  
+  # get direct rates for given rate type
+  rate_type_data <- paste0("direct_rate_", rate_type)  # rate type in data and model list
+  direct_rates_avg_type <- filter(direct_rates_average, type == rate_type_data)
+  direct_rates_datasets_type <- filter(direct_rates_datasets, type == rate_type_data)
+  
+  # get model coefficients for given rate type
+  model_type <- models[[rate_type_data]]
+  a <- exp(coef(model_type)[1])
+  b <- coef(model_type)[2]
+  
+  # plot model fit vs average direct rate per dataset
+  p1 <- ggplot(direct_rates_avg_type, aes(x = dist_to_tss, y = direct_rate)) +
+    geom_point(color = "steelblue") +
+    stat_function(fun = function(x) a * x^b, color = "black") +
+    labs(title = str_to_sentence(paste(rate_type, "direct hit rate (avg. across datasets)")),
+         x = "Distance to TSS (bp)", y = "Direct hit rate") +
+    scale_x_continuous(labels = scales::label_scientific(digits = 1)) +
+    scale_y_continuous(limits = c(NA, ylim)) +
+    theme_bw() +
+    theme(text = element_text(size = 13))
+  
+  # plot model fit vs. direct rate per individual dataset
+  p2 <- ggplot(direct_rates_datasets_type,
+               aes(x = dist_to_tss, y = direct_rate, color = dataset_plots)) +
+    geom_point() +
+    stat_function(fun = function(x) a * x^b, color = "black") +
+    labs(title = str_to_sentence(paste(rate_type, "direct hit rate (per dataset)")),
+         x = "Distance to TSS (bp)", y = "Direct hit rate", color = "Dataset") +
+    scale_x_continuous(labels = scales::label_scientific(digits = 1)) +
+    scale_y_continuous(limits = c(NA, ylim)) +
+    theme_bw() +
+    theme(text = element_text(size = 13))
+  
+  # transform plots to log space if specified
+  if (log == TRUE) {
+    
+    p1 <- p1 +
+      scale_x_log10() +
+      scale_y_log10(limits = c(NA, ylim)) +
+      annotation_logticks()
+    
+    p2 <- p2 +
+      scale_x_log10() +
+      scale_y_log10(limits = c(NA, ylim)) +
+      annotation_logticks()
+    
+  }
+  
+  # arrange into one plot
+  plot_grid(p1, p2, nrow = 1, scale = 0.95, rel_widths = c(0.67, 1))
+  
+}
+```
+
+```{r, fig.height=12, fig.width=12}
+# plot all model fits
+model_fit_plots <- lapply(rate_types, FUN = plot_powerlaw_model_fit, models = models,
+                          direct_rates_average = direct_rates_average,
+                          direct_rates_datasets = direct_rates_datasets,
+                          ylim = max(direct_rates_datasets$direct_rate))
+
+# arrange all plots into on figure
+plot_grid(plotlist = model_fit_plots, ncol = 1)
+```
+
+Plot effect rates in log space. Note that this introduces infinite values in the direct hit rates
+because some distance bins have no positives due to overall data sparsity.
+```{r, fig.height=12, fig.width=12}
+# plot all model fits
+model_fit_plots <- lapply(rate_types, FUN = plot_powerlaw_model_fit, models = models,
+                          direct_rates_average = direct_rates_average,
+                          direct_rates_datasets = direct_rates_datasets,
+                          ylim = max(direct_rates_datasets$direct_rate), log = TRUE)
+
+# arrange all plots into on figure
+plot_grid(plotlist = model_fit_plots, ncol = 1)
+```
+
+***
+
+## Predicted direct effects rate
+Using the powerlaw model, we can predict the direct effects rate as function of distance to TSS.
+```{r}
+# function to predict the direct hit rate for a given distance
+predict_direct_hit_rate <- function(models, new_data, type) {
+  
+  # get model for specified type
+  type <- paste0("direct_rate_", type)
+  fit <- models[[type]]
+  
+  # predict direct hit rate for provided distances and exponentiate to get back to original scale
+  predicted_log_direct_rate <- predict(fit, newdata = new_data)
+  predicted_direct_rate <- exp(predicted_log_direct_rate)
+  
+  # cap predicted values at 1, because the rate can't be higher than that and add to input data
+  new_data$predicted_direct_rate <- pmin(predicted_direct_rate, 1)
+  
+  return(new_data)
+  
+}
+
+# plot predicted direct effects rate for one rate type
+plot_direct_effects_rate <- function(direct_effects, trans_rates, effect_direction, ylim = 1,
+                                     log = FALSE) {
+  
+  # get cis and trans rate for effect direction plot
+  direct_effects <- filter(direct_effects, effect_direction == .env$effect_direction)
+  trans_rates <- filter(trans_rates, effect_direction == .env$effect_direction)
+
+  # make plot
+  p <- ggplot(direct_effects, aes(x = dist_to_tss, y = predicted_direct_rate)) +
+    geom_hline(data = trans_rates, aes(yintercept = hit_rate, color = dataset_plots)) +
+    geom_line() +
+    geom_vline(xintercept = 25000, linetype = "dashed", linewidth = 0.25) +
+    labs(title = str_to_sentence(paste(effect_direction, "effects")), x = "Distance to TSS (Mb)",
+         y = "Direct effects rate", color = "Indirect effect rates\nper dataset") +
+    scale_x_continuous(labels = scales::label_scientific(digits = 1)) +
+    scale_y_continuous(limits = c(0, ylim)) +
+    theme_bw()
+  
+  # log transform axes if specified else just print plot
+  if (log == TRUE) {
+    p <- p + 
+      scale_x_log10() +
+      scale_y_log10(limits = c(NA, ylim[[2]]))
+  }
+  
+  return(p)
+  
+}
+```
+
+```{r, fig.width=9, fig.height=7}
+# predict direct effects rate from 1bp to 1Mb distance to TSS
+direct_effects_1mb <- lapply(rate_types, FUN = predict_direct_hit_rate, models = models, 
+                             new_data = tibble(dist_to_tss = 1:1e6))
+
+# combine into one table
+direct_effects_1mb <- bind_rows(direct_effects_1mb, .id = "effect_direction")
+
+# make plots
+direct_effect_plots <- lapply(rate_types, FUN = plot_direct_effects_rate,
+                              direct_effects = direct_effects_1mb, trans_rates = trans_rates_plot)
+
+# arrange into one figure
+plot_grid(
+  direct_effect_plots[[1]] + theme(legend.position = "none"),
+  direct_effect_plots[[2]] + theme(legend.position = "none"),
+  direct_effect_plots[[3]] + theme(legend.position = "none"),
+  get_legend(direct_effect_plots[[1]]),
+  nrow = 2, ncol = 2)
+```
+
+```{r, fig.width=9, fig.height=7}
+# make plots
+direct_effect_plots <- lapply(rate_types, FUN = plot_direct_effects_rate,
+                              direct_effects = direct_effects_1mb, trans_rates = trans_rates_plot,
+                              ylim = 0.1)
+
+# arrange into one figure
+plot_grid(
+  direct_effect_plots[[1]] + theme(legend.position = "none"),
+  direct_effect_plots[[2]] + theme(legend.position = "none"),
+  direct_effect_plots[[3]] + theme(legend.position = "none"),
+  get_legend(direct_effect_plots[[1]]),
+  nrow = 2, ncol = 2)
+```
+
+## Direct vs. indirect effects probability
+Calculate probability for CRISPR hits being direct vs. indirect effects for each dataset as a
+function of distance to TSS:
+
+<br>
+direct_vs_indirect = direct_rate / (direct_rate + indirect_rate)
+<br> 
+
+```{r}
+# convert indirect trans effects to wide format and add to predicted direct effects
+direct_effects_1mb <- trans_rates_plot %>% 
+  pivot_wider(names_from = dataset_plots, values_from = hit_rate) %>% 
+  left_join(direct_effects_1mb, ., by = "effect_direction") %>% 
+  pivot_longer(cols = -c(effect_direction, dist_to_tss, predicted_direct_rate),
+               names_to = "dataset", values_to = "indirect_rate")
+  
+# calculate direct vs. indirect effects probability
+direct_effects_1mb <- direct_effects_1mb %>% 
+  mutate(direct_vs_indirect =  predicted_direct_rate / (predicted_direct_rate + indirect_rate))  
+```
+
+```{r, fig.width=7, fig.height=10}
+# plot direct vs. indirect effects per dataset and type
+ggplot(direct_effects_1mb, aes(x = dist_to_tss / 1e6, y = direct_vs_indirect,
+                               color = effect_direction)) +
+  facet_wrap(~dataset, ncol = 2) +
+  labs(x = "Distance to TSS (Mb)", y = "Probability direct vs. indirect",
+       color = "Effect direction") +
+  geom_line() +
+  theme_bw() +
+  theme(strip.background = element_blank())
+```
+
+***
+
+## Predicted direct vs. indirect effects probability
+
+## Session information
+This document was produced using following packages:
+```{r sessionInfo}
+sessionInfo()
+```

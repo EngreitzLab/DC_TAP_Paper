@@ -1,0 +1,301 @@
+---
+title: "Validation of the 30 selected WTC11 element-gene pairs"
+output: html_document
+params:
+  sceptre_dir: "analyses/2026-05-11_SCEPTRE/source_data"
+---
+
+Original screen and validation estimates for the 30 selected WTC11 element-gene pairs, per SCEPTRE
+run, with uncertainty and significance calls.
+
+The heatmap (`analyses/2026-05-13_get_statistics/results_statistics.Rmd`) and the effect-size scatter
+plots (`analyses/2026-05-14_compare_low_high_es/compare_es.Rmd`) use the pooled runs
+`low_moi_merged_union` and `high_moi_merged_union` (both replicates in one SCEPTRE object, with
+`channel + sample` as covariates). This notebook reproduces those numbers and adds the per-replicate runs.
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(data.table)
+  library(here)
+  library(ggplot2)
+})
+
+runs_dir <- file.path(params$sceptre_dir, "runs")
+source_data_dir <- here("analyses", "2026-10-23_ctcf_and_validation_statistics", "source_data")
+dir.create(source_data_dir, recursive = TRUE, showWarnings = FALSE)
+
+run_labels <- c(
+  low_moi_merged = "Low MOI, pooled (2 replicates)",
+  MOI1_1 = "Low MOI, replicate 1 (MOI1_1)",
+  MOI1_5 = "Low MOI, replicate 2 (MOI1_5)",
+  high_moi_merged = "High MOI, pooled (2 replicates)",
+  MOI11_3 = "High MOI, replicate 1 (MOI11_3)",
+  MOI13 = "High MOI, replicate 2 (MOI13)"
+)
+```
+
+## Selected pairs and their original calls
+
+```{r selected-pairs}
+table_s3 <- fread(here(
+  "..", "results", "formatted_dc_tap_results",
+  "Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
+))
+manual_pairs <- fread(here("metadata", "validation_30_pairs.tsv"))
+
+selected <- table_s3[
+  cell_type == "WTC11" & element_gene_pair_identifier_hg38 %in% manual_pairs$element_gene_pair_identifier_hg38,
+  .(
+    pair = element_gene_pair_identifier_hg38,
+    gene_symbol,
+    gene_id,
+    element_hg38 = intended_target_name_hg38,
+    element_category,
+    distal_element_gene_pair = DistalElement_Gene,
+    self_promoter = selfPromoter,
+    positive_control_self_promoter = Positive_Control_selfPromoter,
+    included_in_fdr = include_in_fdr,
+    original_pct_change = pct_change_effect_size,
+    original_se_pct_change = standard_error_pct_change,
+    original_ci95_lower = lower_CI_95_pct_change,
+    original_ci95_upper = upper_CI_95_pct_change,
+    original_p_value = sceptre_p_value,
+    original_adj_p_value = sceptre_adj_p_value_wo_pos_controls,
+    original_significant_20fdr = significant_wo_pos_controls_20fdr
+  )
+]
+selected <- merge(
+  selected,
+  manual_pairs[, .(pair = element_gene_pair_identifier_hg38, call_in_figures = as.logical(is_significant))],
+  by = "pair"
+)
+stopifnot(nrow(selected) == 30, uniqueN(selected$pair) == 30)
+
+selected[, pair_class := fcase(
+  included_in_fdr %in% FALSE, "Self-promoter pair (not in FDR set)",
+  original_significant_20fdr %in% TRUE, "Original hit (20% FDR)",
+  default = "Original non-hit"
+)]
+
+# Self-promoter pairs were not part of the FDR set of the screen (include_in_fdr = FALSE, adjusted
+# p-value NA); metadata/validation_30_pairs.tsv marks the TP53 self-promoter pair as significant.
+knitr::kable(selected[, .N, by = .(pair_class, call_in_figures)])
+knitr::kable(
+  selected[pair_class != "Original hit (20% FDR)",
+           .(pair, pair_class, self_promoter, positive_control_self_promoter, included_in_fdr,
+             original_pct_change, original_p_value, original_adj_p_value)],
+  digits = 4
+)
+```
+
+## Validation estimates
+
+Effect sizes are reported as % change in expression, `100 * (fold_change - 1)`, with a Wald 95% CI
+`± 1.96 * 100 * se_fold_change` (as in `compare_es.Rmd`). Significance is SCEPTRE's call (Benjamini-Hochberg
+at 10% FDR over the 345 discovery pairs tested in each run); the BH-adjusted p-value is recomputed here
+and checked against SCEPTRE's call. Original calls in the screen used 20% FDR.
+
+```{r load-runs}
+read_run <- function(run) {
+  x <- fread(here(runs_dir, run, "sceptre_discovery_results.tsv"))
+  x[, adj_p_value_bh := p.adjust(p_value, method = "BH")]
+  if (!isTRUE(all.equal(x$significant %in% TRUE, x$adj_p_value_bh < 0.1))) {
+    warning("Recomputed BH calls differ from SCEPTRE calls for ", run)
+  }
+  x[, run := sub("_union$", "", run)]
+  x
+}
+
+runs <- paste0(names(run_labels), "_union")
+all_results <- rbindlist(lapply(runs, read_run))
+print(all_results[, .(n_pairs = .N, n_significant = sum(significant %in% TRUE)), by = run])
+
+all_results[, `:=`(
+  pct_change = 100 * (fold_change - 1),
+  se_pct_change = 100 * se_fold_change,
+  gene_id_stripped = sub("[.].*$", "", response_id)
+)]
+all_results[, `:=`(
+  ci95_lower = pct_change - 1.96 * se_pct_change,
+  ci95_upper = pct_change + 1.96 * se_pct_change,
+  significant_10fdr = significant %in% TRUE,
+  significant_20fdr = adj_p_value_bh < 0.2
+)]
+
+selected[, gene_id_stripped := sub("[.].*$", "", gene_id)]
+validation <- merge(
+  selected,
+  all_results,
+  by.x = c("gene_id_stripped", "element_hg38"),
+  by.y = c("gene_id_stripped", "grna_target")
+)
+stopifnot(validation[, .N, by = run]$N == 30)
+```
+
+## Cells analysed per run
+
+```{r cells}
+parse_cells <- function(run) {
+  line <- grep("after cellwise QC", readLines(here(runs_dir, run, "sceptre_outputs", "analysis_summary.txt"), warn = FALSE), value = TRUE)
+  numbers <- as.numeric(regmatches(line, gregexpr("[0-9]+", line))[[1]])
+  data.table(run = sub("_union$", "", run), cells_imported = numbers[1], cells_after_qc = numbers[2])
+}
+cells <- rbindlist(lapply(runs, parse_cells))
+knitr::kable(cells)
+```
+
+Cells per replicate in the pooled low-MOI run (needs the full SCEPTRE output, `sceptre_dir = "results/2026-06-10_SCEPTRE"`):
+
+```{r cells-per-replicate}
+pooled_object_path <- here(runs_dir, "low_moi_merged_union", "sceptre_object_post_pipeline.rds")
+if (file.exists(pooled_object_path)) {
+  pooled_object <- readRDS(pooled_object_path)
+  cells_per_replicate <- as.data.table(table(sample = pooled_object@covariate_data_frame$sample[pooled_object@cells_in_use]))
+  setnames(cells_per_replicate, "N", "cells_after_qc_in_pooled_run")
+  rm(pooled_object)
+  invisible(gc())
+  knitr::kable(cells_per_replicate)
+} else {
+  cat("Not available from source data.\n")
+}
+```
+
+## Summary by run
+
+```{r summary-by-run}
+correlation_row <- function(x, y, label) {
+  pearson <- cor.test(x, y, method = "pearson")
+  data.table(
+    pairs = label,
+    n = length(x),
+    pearson_r = unname(pearson$estimate),
+    pearson_ci95_lower = pearson$conf.int[1],
+    pearson_ci95_upper = pearson$conf.int[2],
+    spearman_rho = suppressWarnings(unname(cor.test(x, y, method = "spearman")$estimate))
+  )
+}
+
+summary_by_run <- validation[
+  ,
+  {
+    hits <- pair_class == "Original hit (20% FDR)"
+    non_hits <- pair_class == "Original non-hit"
+    promoter <- pair_class == "Self-promoter pair (not in FDR set)"
+    data.table(
+      original_hits_significant = sprintf("%d / %d", sum(significant_10fdr[hits]), sum(hits)),
+      original_hits_same_direction = sprintf("%d / %d", sum(sign(pct_change[hits]) == sign(original_pct_change[hits])), sum(hits)),
+      original_nonhits_significant = sprintf("%d / %d", sum(significant_10fdr[non_hits]), sum(non_hits)),
+      tp53_promoter_pair_significant = sum(significant_10fdr[promoter]) == 1,
+      r_all_30 = cor(original_pct_change, pct_change),
+      r_29_distal_pairs = cor(original_pct_change[!promoter], pct_change[!promoter]),
+      r_original_hits = cor(original_pct_change[hits], pct_change[hits])
+    )
+  },
+  by = run
+]
+summary_by_run[, run_label := run_labels[run]]
+knitr::kable(summary_by_run, digits = 3)
+
+correlations_vs_original <- validation[
+  ,
+  rbind(
+    correlation_row(original_pct_change, pct_change, "all 30 selected pairs"),
+    correlation_row(
+      original_pct_change[pair_class != "Self-promoter pair (not in FDR set)"],
+      pct_change[pair_class != "Self-promoter pair (not in FDR set)"],
+      "29 distal pairs (TP53 self-promoter pair excluded)"
+    ),
+    correlation_row(
+      original_pct_change[pair_class == "Original hit (20% FDR)"],
+      pct_change[pair_class == "Original hit (20% FDR)"],
+      "24 original hits"
+    )
+  ),
+  by = run
+]
+correlations_vs_original[, comparison := paste("Original screen vs", run_labels[run])]
+knitr::kable(correlations_vs_original, digits = 3)
+```
+
+## Replicate concordance (the two low-MOI replicates analysed separately)
+
+```{r replicate-concordance}
+replicate_wide <- dcast(
+  validation[run %in% c("MOI1_1", "MOI1_5")],
+  pair + pair_class ~ run,
+  value.var = c("pct_change", "fold_change", "se_fold_change", "significant_10fdr")
+)
+
+replicate_correlations <- rbind(
+  correlation_row(replicate_wide$pct_change_MOI1_1, replicate_wide$pct_change_MOI1_5, "all 30 selected pairs"),
+  correlation_row(
+    replicate_wide[pair_class != "Self-promoter pair (not in FDR set)", pct_change_MOI1_1],
+    replicate_wide[pair_class != "Self-promoter pair (not in FDR set)", pct_change_MOI1_5],
+    "29 distal pairs (TP53 self-promoter pair excluded)"
+  )
+)
+all_pairs_wide <- dcast(
+  all_results[run %in% c("MOI1_1", "MOI1_5")],
+  response_id + grna_target ~ run,
+  value.var = "pct_change"
+)
+replicate_correlations <- rbind(
+  replicate_correlations,
+  correlation_row(all_pairs_wide$MOI1_1, all_pairs_wide$MOI1_5, "all 345 tested pairs")
+)
+replicate_correlations[, comparison := "Low-MOI replicate 1 vs replicate 2"]
+knitr::kable(replicate_correlations, digits = 3)
+
+# Per-pair heterogeneity between the two replicates (z-test on the log fold change;
+# delta-method SE of log(FC) = se_fold_change / fold_change).
+replicate_wide[, `:=`(
+  log_fc_difference = log(fold_change_MOI1_1) - log(fold_change_MOI1_5),
+  se_log_fc_difference = sqrt((se_fold_change_MOI1_1 / fold_change_MOI1_1)^2 + (se_fold_change_MOI1_5 / fold_change_MOI1_5)^2)
+)]
+replicate_wide[, heterogeneity_p := 2 * pnorm(-abs(log_fc_difference / se_log_fc_difference))]
+replicate_wide[, heterogeneity_adj_p_bh := p.adjust(heterogeneity_p, method = "BH")]
+cat("Pairs with a significant difference between replicates (BH 10%):", sum(replicate_wide$heterogeneity_adj_p_bh < 0.1), "of", nrow(replicate_wide), "\n")
+knitr::kable(
+  replicate_wide[order(heterogeneity_p), .(pair, pair_class, pct_change_MOI1_1, pct_change_MOI1_5, heterogeneity_p, heterogeneity_adj_p_bh)][1:5],
+  digits = 4
+)
+```
+
+```{r replicate-plot, fig.width=5, fig.height=5}
+ggplot(replicate_wide, aes(x = pct_change_MOI1_1, y = pct_change_MOI1_5, color = pair_class)) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dotted") +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.3) +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
+  geom_point(size = 2) +
+  theme_classic() +
+  theme(aspect.ratio = 1, legend.position = "bottom", legend.direction = "vertical") +
+  labs(x = "Replicate 1 (MOI1_1) effect size (%)", y = "Replicate 2 (MOI1_5) effect size (%)", color = NULL)
+```
+
+## Export
+
+```{r export}
+run_prefixes <- c(low_moi_merged = "val_lowmoi_pooled", MOI1_1 = "val_lowmoi_rep1", MOI1_5 = "val_lowmoi_rep2", high_moi_merged = "val_highmoi_pooled")
+value_columns <- c("pct_change", "ci95_lower", "ci95_upper", "p_value", "adj_p_value_bh", "significant_10fdr")
+
+pairs_table <- selected[
+  ,
+  .(
+    pair, gene_symbol, gene_id, element_hg38, element_category, pair_class,
+    original_pct_change, original_ci95_lower, original_ci95_upper, original_p_value,
+    original_adj_p_value, original_significant_20fdr
+  )
+]
+for (run_name in names(run_prefixes)) {
+  run_values <- validation[run == run_name, c("pair", value_columns), with = FALSE]
+  setnames(run_values, value_columns, paste0(run_prefixes[[run_name]], "_", value_columns))
+  pairs_table <- merge(pairs_table, run_values, by = "pair", sort = FALSE)
+}
+class_order <- c("Original hit (20% FDR)", "Original non-hit", "Self-promoter pair (not in FDR set)")
+pairs_table <- pairs_table[order(match(pair_class, class_order), element_category, gene_symbol, element_hg38)]
+fwrite(pairs_table, file.path(source_data_dir, "validation_30_selected_pairs.tsv"), sep = "\t")
+
+knitr::kable(pairs_table[, .(pair, pair_class, original_pct_change, original_significant_20fdr,
+                                     val_lowmoi_pooled_pct_change, val_lowmoi_pooled_significant_10fdr,
+                                     val_lowmoi_rep1_significant_10fdr, val_lowmoi_rep2_significant_10fdr)], digits = 2)
+```

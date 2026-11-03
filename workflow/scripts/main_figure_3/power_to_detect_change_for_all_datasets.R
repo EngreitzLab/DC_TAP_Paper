@@ -66,7 +66,7 @@ get_power_col <- function(data, es) {
 }
 
 calc_power_props <- function(data, dataset_name) {
-  map_dfr(c(10, 15, 20, 25, 50), function(es) {
+  map_dfr(c(5, 10, 15, 20, 25, 50), function(es) {
     col <- get_power_col(data, es)
     if (is.na(col)) {
       warning(dataset_name, ": no column for effect-size ", es)

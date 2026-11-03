@@ -90,7 +90,7 @@ get_power_col_validation <- function(nms, es, prefer_wo = FALSE) {
 }
 
 calc_power_props <- function(df, dataset_name, prefer_wo = FALSE, encode_dataset = FALSE) {
-  es_list <- c(10, 15, 20, 25, 50)
+  es_list <- c(5, 10, 15, 20, 25, 50)
   
   purrr::map_dfr(es_list, function(es) {
     col <- if (encode_dataset)
@@ -170,10 +170,10 @@ dataset_colors <- c(
 # --- ensure clean, explicit x labels (no more "…") ---
 # make effect_size a factor with fixed levels
 all_power_props <- all_power_props %>%
-  dplyr::mutate(effect_size = factor(effect_size, levels = c(10, 15, 20, 25, 50)))
+  dplyr::mutate(effect_size = factor(effect_size, levels = c(5, 10, 15, 20, 25, 50)))
 
 # map levels -> labels explicitly (use plain hyphen to avoid font issues)
-x_labels <- c("10" = "-10%", "15" = "-15%", "20" = "-20%", "25" = "-25%", "50" = "-50%")
+x_labels <- c("5" = "-5%", "10" = "-10%", "15" = "-15%", "20" = "-20%", "25" = "-25%", "50" = "-50%")
 
 # axis text size knobs
 axis_text_size  <- 14

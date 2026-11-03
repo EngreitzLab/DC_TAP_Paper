@@ -1,0 +1,226 @@
+---
+title: "Plot proportion of indirect effects vs cis hit ratio"
+author: "Andreas R. Gschwind"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setupDocument, include=FALSE}
+# save.image(paste0("analyze_", snakemake@wildcards$sample, ".rda"))
+# stop()
+
+# set output html chunk options
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+# set random seed
+set.seed(snakemake@params$seed)
+```
+
+## Goal
+Calculate indirect effects positive ratio and compare to cis-effect positive ratio as a function of
+distance to TSS.
+```{r requiredPackages, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(data.table)
+library(Matrix)
+```
+
+***
+
+## Used data
+Results from differential expression tests for trans-acting effects are used to estimate the
+proportion of indirect effects in CRISPR data. Proportion of indirect effects is compared to
+proportion of direct cis effects from main differential expression results.
+```{r}
+# load trans effect results
+trans_results <- readRDS(snakemake@input$trans_results)
+
+# load cis effects results from previous run
+cis_results <- read_csv(snakemake@input$cis_results, show_col_types = FALSE)
+
+# load gene universe file and gene expression data
+gene_univ <- read_tsv(snakemake@input$gene_univ, show_col_types = FALSE)
+gene_expr <- read_csv(snakemake@input$gene_expr, show_col_types = FALSE)
+```
+
+***
+
+## Define significant trans-acting effects
+Define significant trans effects by applying the same p-value threshold as for the cis effects.
+```{r}
+# significance threshold for cis effects
+pval_threshold_cis <- cis_results %>% 
+  filter(significant == TRUE) %>% 
+  pull(p_value) %>% 
+  max()
+
+# add significance to trans-effect results based on cis significance threshold
+trans_results <- trans_results %>% 
+  mutate(significant = p_value <= pval_threshold_cis,
+         regulated = significant & log_2_fold_change < 0)
+
+# add regulated column to cis results
+cis_results <- cis_results %>% 
+  mutate(regulated = significant & log_2_fold_change < 0)
+```
+
+***
+
+## Filter data
+Filter trans and cis effects based on ValidConnection in ENCODE format data. For trans effects, any
+perturbations that are TSS controls or overlap potential promoters are removed. For cis effects,
+the same filter is applied in addition to removing any E-G pairs where the perturbation is within
+the gene body of their target genes. These filters consistent with all other ENCODE distal
+regulation analyses, except for that the statistical power filter isn't applied.
+```{r}
+# get all valid elements from cis results
+valid_elements <- cis_results %>% 
+  filter(valid_element == TRUE) %>% 
+  pull(grna_target) %>% 
+  unique()
+
+# add a valid connection column to trans-results based on whether perturbation is a valid element
+trans_results <- mutate(trans_results, valid_connection = grna_target %in% valid_elements)
+
+# filter cis and trans results based on whether they are valid connection for the analysis
+cis_results_filt <- filter(cis_results, valid_connection == TRUE, pass_qc == TRUE)
+trans_results_filt <- filter(trans_results, valid_connection == TRUE, pass_qc == TRUE)
+
+# only retain data on genes in distal regulation genes universe
+cis_results_filt <- filter(cis_results_filt, response_id %in% gene_univ$Ensembl_ID)
+trans_results_filt <- filter(trans_results_filt, response_id %in% gene_univ$Ensembl_ID)
+```
+
+***
+
+## Calculate positive ratios
+Calculate proportion of positives for both trans effects and cis effects. For the latter, the
+proportion of positives is calculates as a function of distance to TSS.
+
+Bin cis results into 50kb bins based on distance to TSS and compute proportion of positives for each
+bin:
+```{r}
+# distance bins for calculating positive hit ratio
+max_dist <- 1e6
+dist_bins <- seq(0, max_dist, by = 5e4)
+
+# bin cis pairs by distance
+cis_results_filt <- cis_results_filt %>% 
+  mutate(abs_dist_to_tss = abs(dist_to_tss)) %>% 
+  filter(abs_dist_to_tss <= max_dist) %>% 
+  mutate(dist_bin = cut(abs_dist_to_tss, breaks = dist_bins, include.lowest = TRUE))
+
+# calculate positive ratios and mean distance per distance bin
+cis_pos_ratio <- cis_results_filt %>% 
+  group_by(dist_bin) %>% 
+  summarize(positive_ratio = mean(regulated),
+            mean_dist = mean(abs_dist_to_tss)) %>% 
+  mutate(Type = "Cis-interactions")
+```
+
+Calculate proportion of positives for trans effects regardless of distance (all are on other
+chromosomes than the perturbation).
+```{r}
+# calculate trans-effects positive ratio
+trans_pos_ratio <- mean(trans_results_filt$regulated, na.rm = TRUE)
+
+# create mock table
+trans_pos_ratio_table <- tibble(mean_dist = c(0, max_dist),
+       positive_ratio = trans_pos_ratio,
+       Type = "Trans-interactions")
+```
+
+Based on this analysis, the expected trans-effect ratio is: `r trans_pos_ratio`.
+
+## Plot cis vs trans positive ratios
+Plot the proportion of positives for cis effects as a function of distance to TSS. Add a horizontal
+line to indicate the expected proportion of indirect effects estimated from testing for trans
+effects. The red line indicates where the proportion of cis effects starts to be equal to the
+expected proportion of indirect effects. 
+```{r, fig.height=3.5, fig.width=7}
+# manually inferred distance to TSS threshold where proportion of indirect effects is same as
+# proportion of effects in cis
+dist_threshold <- snakemake@params$dist_threshold
+
+# plot proportion of positives as function of distance
+plot_title <- paste(snakemake@wildcards$sample, "cis vs. trans positive ratio")
+ggplot(cis_pos_ratio, aes(x = mean_dist, y = positive_ratio, color = Type)) +
+  geom_point() +
+  geom_line(data = trans_pos_ratio_table) +
+  geom_vline(xintercept = dist_threshold, color = "firebrick") +
+  labs(x = "Distance to TSS (50kb bins)", y = "Proportion positives", title = plot_title) +
+  scale_color_manual(values = c("black", "dodgerblue3")) +
+  theme_bw()
+```
+
+***
+
+## Calculate positive ratios beyond distance threshold
+```{r}
+# function to calculate hit ratios within a given distance to tss range
+calc_hit_ratios_dist <- function(cis_results, trans_pos_ratio, min_dist, max_dist) {
+  
+  # get total number of cis-hits below max distance
+  cis_results <- filter(cis_results, abs_dist_to_tss <= max_dist)
+  total_cis_hits <- sum(cis_results$regulated)
+  
+  # calculate proportions of hits above min distance
+  cis_results %>% 
+    filter(abs_dist_to_tss > min_dist) %>% 
+    summarize(far_cis_hits = sum(regulated),
+              far_cis_pos_ratio = mean(regulated)) %>% 
+    mutate(trans_pos_ratio = trans_pos_ratio,
+           far_cis_vs_trans_ratio = far_cis_pos_ratio / trans_pos_ratio,
+           expect_true_far_cis_prop = far_cis_pos_ratio / (far_cis_pos_ratio + trans_pos_ratio)) %>%
+    mutate(total_cis_hits = total_cis_hits, .before = far_cis_hits) %>% 
+    mutate(prop_far_cis_hits = far_cis_hits / total_cis_hits, .after = far_cis_hits)
+}
+
+# compute overall cis-hit ratio beyond 250kb and within 1Mb
+cis_stats_250kb <- calc_hit_ratios_dist(cis_results_filt, trans_pos_ratio = trans_pos_ratio,
+                                        min_dist = dist_threshold, max_dist = max_dist)
+# save to table
+outfile <- file.path("results", snakemake@wildcards$sample, "indirect_effects_proportions.csv")
+write_csv(cis_stats_250kb, file = outfile)
+```
+
+***
+
+## Compare gene expression distributions
+Compare expression distributions between genes in cis- and trans-acting pairs.
+```{r, fig.width=4, fig.height=4.5}
+# add gene expression levels to sceptre results
+trans_results_filt <- left_join(trans_results_filt, gene_expr, by = c("response_id" = "gene"))
+cis_results_filt <- left_join(cis_results_filt, gene_expr, by = c("response_id" = "gene"))
+
+# get expression for genes in cis- and trans-pairs
+trans_filt_expr <- select(trans_results_filt, response_id, avg_expr)
+cis_filt_expr <- select(cis_results_filt, response_id, avg_expr)
+expr <- bind_rows(trans = trans_filt_expr, cis = cis_filt_expr, .id = "type")
+
+# only retain unique genes in both trans and cis gene lists
+expr <- distinct(expr)
+
+# plot expression distributions between genes in cis- and trans-pairs
+ggplot(expr, aes(x = type, y = avg_expr, fill = type)) +
+  geom_violin() +
+  geom_boxplot(width = 0.25) +
+  labs(title = paste("Gene expression", snakemake@wildcards$sample ), y = "Avg. UMI per cell",
+       x = "Analysis") +
+  scale_fill_manual(values = c(cis = "steelblue", trans = "goldenrod")) +
+  scale_y_log10() +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+***
+
+## Session information
+This document was produced using following packages:
+```{r sessionInfo}
+sessionInfo()
+```

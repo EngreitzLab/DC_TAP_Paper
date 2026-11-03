@@ -93,7 +93,7 @@ def top_tab(cell,sign='neg',bg='powered',n=20):
 
 today=datetime.date.today().isoformat()
 
-# counts for reviewer reply (data-driven)
+# summary counts (data-driven)
 def n_sig(cell, sign, bg, thr=0.1):
     r = enr[(cell, sign, bg)]
     return 0 if not len(r) else int((r['FDR'] < thr).sum())
@@ -111,7 +111,7 @@ def top_targets(cell, sign, bg, n=6):
     return ", ".join(r['target'].head(n).tolist())
 k_top = top_targets('K562','neg','powered'); w_top = top_targets('WTC11','neg','powered')
 
-# significant DEPLETIONS (FDR<0.1 AND odds ratio < 1) — reviewer question 6
+# significant DEPLETIONS (FDR<0.1 AND odds ratio < 1)
 def depletions(cell, sign='neg', bg='powered', thr=0.1):
     r = enr[(cell, sign, bg)]
     if not len(r): return r
@@ -234,15 +234,7 @@ html=f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>DC-TAP-seq × E
 <b>Significant depletions.</b> Testing the same targets for <i>under</i>-representation (FDR&lt;0.1 with odds ratio &lt; 1) in negative-effect positives vs the well-powered background yields {n_dep_k} in K562 and {n_dep_w} in WTC11: {dep_txt}. H2A.Z (<code>H2AFZ</code>) marks nucleosome-flanked promoters/insulators and is the only mark whose 95% CI sits entirely below 0 in the full dot plot — consistent with distal activating enhancers being relatively H2A.Z-poor.
 </div>
 
-<h2>5. Draft reply to the reviewer</h2>
-<div class="box">
-<p>We thank the reviewer for this suggestion. We have now systematically intersected our randomly-selected DC-TAP-seq elements with the complete catalog of ENCODE ChIP-seq experiments in unperturbed cells for both cell types. For K562 this comprised {kt} ChIP-seq experiments spanning {ktt} unique targets ({ktf} transcription factors and {kth} histone marks); for WTC11 the native histone data on ENCODE come exclusively from Mint-ChIP-seq (there is no conventional Histone ChIP-seq for WTC11), so we queried TF ChIP-seq, Histone ChIP-seq and Mint-ChIP-seq and additionally included the closest ENCODE iPSC/ESC lines (H1, H9) to cover histone marks not natively assayed in WTC11, giving {wt} experiments across {wtt} targets ({wtf} TFs, {wth} histone marks). The two histone marks central to the manuscript's WTC11 categorization — H3K27ac and H3K27me3 — are both available as native WTC11 Mint-ChIP-seq.</p>
-<p>This analysis largely recapitulates the chromatin picture captured by our original chromatin categories, with active enhancers (significant hits with negative effect size) carrying TF and histone-mark occupancy. We found that DC-TAP-seq negative-effect positives are broadly and significantly enriched for TF and histone-mark occupancy relative to background: {kn} targets in K562 and {wn} in WTC11 reach FDR&lt;0.1, with top-ranked factors ({ktop} in K562; {wtop} in WTC11) dominated by general transcriptional/enhancer-associated machinery rather than a single specific factor. On the other hand, positive-effect positives show essentially no enrichment.</p>
-<p>We have added Supplementary Figure X-TF with these results, and a sentence to the Results noting the broader trends from the analysis:</p>
-</div>
-<p class="cap">Counts are generated directly from the pipeline outputs at report-build time.</p>
-
-<h2>6. Methods & reproducibility</h2>
+<h2>5. Methods & reproducibility</h2>
 <p>The pipeline takes <b>Table S3</b> as its only biological input and is fully scripted:</p>
 <ol>
 <li><b>Element sets</b> — <span class="mono">build_element_sets.py</span>: parses Table S3, filters to <code>Random_DistalElement_Gene==True</code> per cell type, dedups to element loci, writes BED files.</li>

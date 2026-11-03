@@ -1,0 +1,385 @@
+---
+title: "CTCF ChIP-seq statistics and source data"
+output: html_document
+---
+
+Statistical tests of the CTCF ChIP-seq signal at the FAM111A and CDC37 CTCF elements, and source-data
+tables for the CTCF figures.
+
+The signal values (mean CPM over the 301-bp tested element in each library's bigWig) come from
+`analyses/2026-06-29_CTCF_ChIP_validation/ctcf_signal_from_bigwigs.py` and are plotted in
+`analyses/2026-06-30_CTCF_Plots/plots_for_paper.Rmd`. This notebook does not recompute the signal. It
+tests the plotted values and writes the source-data tables to `source_data/`.
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(data.table)
+  library(here)
+  library(ggplot2)
+  library(GenomicRanges)
+})
+source(here("scripts", "R", "utils.R"))
+
+source_data_dir <- here("analyses", "2026-10-23_ctcf_and_validation_statistics", "source_data")
+dir.create(source_data_dir, recursive = TRUE, showWarnings = FALSE)
+```
+
+## Inputs
+
+```{r load-inputs}
+signal_df <- fread(here("analyses", "2026-06-29_CTCF_ChIP_validation", "source_data", "ctcf_signal_per_replicate.tsv"))
+libraries <- fread(here("metadata", "ctcf_chip_libraries.tsv"), na.strings = c("", "NA"))
+guides_bed <- fread(
+  here("analyses", "2026-06-30_CTCF_Plots", "chip_sgrnas_hg38.bed"),
+  col.names = c("chr", "start", "end", "name", "score", "strand", "thick_start", "thick_end", "rgb")
+)
+motifs_jaspar <- fread(
+  here("analyses", "2026-06-29_CTCF_ChIP_validation", "CTCF_jaspar_motifs.bed"),
+  col.names = c("chr", "start", "end", "name", "score", "strand")
+)
+motifs_plot <- fread(
+  here("analyses", "2026-06-30_CTCF_Plots", "ctcf_element_motifs_hg38.bed"),
+  col.names = c("chr", "start", "end", "name", "score", "strand", "thick_start", "thick_end", "rgb")
+)
+
+signal_df
+```
+
+The two control lines both carry non-targeting sgRNAs:
+
+```{r control-description}
+unique(libraries[intended_target == "control", .(group, sgrna, sgrna_oligo_id)])
+```
+
+## Library annotation
+
+```{r annotate-libraries}
+sgrna_labels <- c(
+  G2 = "FAM111A sgRNA G2", G3 = "FAM111A sgRNA G3",
+  G4 = "CDC37 sgRNA G4", G6 = "CDC37 sgRNA G6",
+  NC2 = "Non-targeting NC2", WTC11_NT = "Non-targeting NT1"
+)
+
+annotated <- merge(
+  signal_df,
+  libraries[, .(sample_id, sequencing_library, pf_fragments, sgrna, sgrna_oligo_id, sgrna_hg38)],
+  by = "sample_id",
+  all.x = TRUE,
+  sort = FALSE
+)
+annotated[, control_status := ifelse(intended_target == "control", "non-targeting control", "targeting")]
+annotated[, test_group := ifelse(intended_target == "control", "Pooled NT controls (NC2 + NT1)", sgrna)]
+
+stopifnot(!anyNA(annotated$sequencing_library), nrow(annotated) == 36)
+```
+
+## Sample sizes
+
+Each value is one CTCF ChIP-seq library (one ChIP replicate of one sgRNA line). Within each locus:
+
+```{r sample-sizes}
+sample_sizes <- annotated[
+  ,
+  .(
+    n_libraries = .N,
+    median_cpm = median(mean_signal),
+    mean_cpm = mean(mean_signal),
+    sd_cpm = sd(mean_signal)
+  ),
+  by = .(locus_label, locus, sgrna)
+][order(locus_label, sgrna)]
+knitr::kable(sample_sizes, digits = 3)
+```
+
+## Guide-level tests
+
+Each targeting sgRNA (n = 3 ChIP libraries) is compared with the pooled non-targeting controls
+(NC2 + NT1; n = 6 ChIP libraries; the replicate values of the two control lines are combined into one
+group without averaging) at the sgRNA's intended locus, using a two-sided Wilcoxon rank-sum test.
+With n < 50 per group and no ties, R's `wilcox.test()` computes the exact null distribution by default;
+`exact = TRUE` is set explicitly here. The asymptotic p-value (normal approximation with continuity
+correction) is shown for reference only.
+
+```{r guide-level-tests}
+run_wilcoxon <- function(test_values, control_values) {
+  exact_test <- suppressWarnings(wilcox.test(
+    test_values, control_values,
+    alternative = "two.sided", exact = TRUE, conf.int = TRUE, conf.level = 0.95
+  ))
+  asymptotic_test <- wilcox.test(
+    test_values, control_values,
+    alternative = "two.sided", exact = FALSE, correct = TRUE
+  )
+  data.table(
+    n_test = length(test_values),
+    n_control = length(control_values),
+    median_test_cpm = median(test_values),
+    median_control_cpm = median(control_values),
+    fold_change_of_means = mean(test_values) / mean(control_values),
+    W = unname(exact_test$statistic),
+    test_method = exact_test$method,
+    p_exact_two_sided = exact_test$p.value,
+    p_asymptotic_two_sided = asymptotic_test$p.value,
+    hodges_lehmann_shift_cpm = unname(exact_test$estimate),
+    shift_ci_lower = exact_test$conf.int[1],
+    shift_ci_upper = exact_test$conf.int[2],
+    shift_ci_level = attr(exact_test$conf.int, "conf.level"),
+    min_attainable_p = 2 / choose(length(test_values) + length(control_values), length(test_values))
+  )
+}
+
+values_for <- function(locus, guides = NULL, targets = NULL) {
+  rows <- annotated$locus_label == locus
+  if (!is.null(guides)) rows <- rows & annotated$guide %in% guides
+  if (!is.null(targets)) rows <- rows & annotated$intended_target %in% targets
+  annotated$mean_signal[rows]
+}
+
+guide_comparisons <- data.table(
+  locus_label = c("FAM111A_peak", "FAM111A_peak", "CDC37_peak", "CDC37_peak"),
+  guide = c("G2", "G3", "G4", "G6")
+)
+
+guide_tests <- rbindlist(lapply(seq_len(nrow(guide_comparisons)), function(i) {
+  cmp <- guide_comparisons[i]
+  cbind(cmp, run_wilcoxon(values_for(cmp$locus_label, guides = cmp$guide), values_for(cmp$locus_label, targets = "control")))
+}))
+guide_tests[, comparison := paste(sgrna_labels[guide], "vs pooled NT controls")]
+guide_tests[, direction := ifelse(median_test_cpm < median_control_cpm, "lower than controls", "higher than controls")]
+guide_tests[, p_holm_4_guides := p.adjust(p_exact_two_sided, method = "holm")]
+guide_tests[, p_bh_4_guides := p.adjust(p_exact_two_sided, method = "BH")]
+guide_tests[, family := "guide-level (4 tests)"]
+
+knitr::kable(
+  guide_tests[, .(comparison, n_test, n_control, median_test_cpm, median_control_cpm, fold_change_of_means,
+                  W, test_method, p_exact_two_sided, p_asymptotic_two_sided, p_holm_4_guides, p_bh_4_guides,
+                  direction)],
+  digits = 4
+)
+```
+
+With 3 vs 6 observations the exact two-sided test cannot return a p-value below
+`r signif(2 / choose(9, 3), 3)` (complete separation of the two groups). The smallest Holm threshold
+for four tests is 0.05 / 4 = 0.0125, so no guide-level comparison can be declared significant after
+Holm (or Bonferroni) correction with this design, regardless of effect size. G3 (FAM111A) and G6
+(CDC37) both reach this floor, in opposite directions.
+
+## Locus-level tests (both sgRNAs pooled)
+
+Both targeting sgRNAs at a locus (n = 6 libraries) vs the pooled non-targeting controls (n = 6),
+Holm-adjusted across the two loci.
+
+```{r locus-level-tests}
+locus_tests <- rbindlist(lapply(c("FAM111A_peak", "CDC37_peak"), function(locus) {
+  cbind(
+    data.table(locus_label = locus),
+    run_wilcoxon(values_for(locus, targets = sub("_peak$", "", locus)), values_for(locus, targets = "control"))
+  )
+}))
+locus_tests[, guide := ifelse(locus_label == "FAM111A_peak", "G2+G3", "G4+G6")]
+locus_tests[, comparison := paste(sub("_peak$", "", locus_label), "sgRNAs (both) vs pooled NT controls")]
+locus_tests[, direction := ifelse(median_test_cpm < median_control_cpm, "lower than controls", "higher than controls")]
+locus_tests[, p_holm_2_loci := p.adjust(p_exact_two_sided, method = "holm")]
+locus_tests[, family := "locus-level (2 tests)"]
+
+knitr::kable(
+  locus_tests[, .(comparison, n_test, n_control, fold_change_of_means, W, p_exact_two_sided, p_holm_2_loci, direction)],
+  digits = 4
+)
+```
+
+## Sensitivity analyses
+
+### The two control lines
+
+```{r control-lines}
+control_lines <- annotated[intended_target == "control", .(mean_cpm = mean(mean_signal), sd_cpm = sd(mean_signal), n = .N), by = .(locus_label, sgrna)]
+knitr::kable(control_lines, digits = 3)
+
+control_line_tests <- rbindlist(lapply(c("FAM111A_peak", "CDC37_peak"), function(locus) {
+  cbind(
+    data.table(locus_label = locus, comparison = "NC2 vs NT1"),
+    run_wilcoxon(values_for(locus, guides = "NC2"), values_for(locus, guides = "WTC11_NT"))
+  )
+}))
+knitr::kable(control_line_tests[, .(locus_label, comparison, n_test, n_control, fold_change_of_means, p_exact_two_sided, min_attainable_p)], digits = 4)
+```
+
+### Each targeting sgRNA against each control line separately
+
+With 3 vs 3 libraries the smallest attainable exact two-sided p-value is 0.1, so only the direction
+and size of the difference are informative.
+
+```{r per-control}
+per_control <- rbindlist(lapply(seq_len(nrow(guide_comparisons)), function(i) {
+  cmp <- guide_comparisons[i]
+  test_values <- values_for(cmp$locus_label, guides = cmp$guide)
+  rbindlist(lapply(c("NC2", "WTC11_NT"), function(control_guide) {
+    control_values <- values_for(cmp$locus_label, guides = control_guide)
+    data.table(
+      locus_label = cmp$locus_label,
+      sgrna = sgrna_labels[[cmp$guide]],
+      control = sgrna_labels[[control_guide]],
+      fold_change_of_means = mean(test_values) / mean(control_values),
+      n_test_below_all_controls = sum(test_values < min(control_values)),
+      n_test_above_all_controls = sum(test_values > max(control_values))
+    )
+  }))
+}))
+knitr::kable(per_control, digits = 3)
+```
+
+### Welch t-test on log2 CPM (parametric complement)
+
+```{r welch}
+welch_tests <- rbindlist(lapply(seq_len(nrow(guide_comparisons)), function(i) {
+  cmp <- guide_comparisons[i]
+  welch <- t.test(
+    log2(values_for(cmp$locus_label, guides = cmp$guide)),
+    log2(values_for(cmp$locus_label, targets = "control")),
+    var.equal = FALSE
+  )
+  cbind(cmp, data.table(
+    log2_fold_change = unname(welch$estimate[1] - welch$estimate[2]),
+    ci_lower = welch$conf.int[1],
+    ci_upper = welch$conf.int[2],
+    p_welch = welch$p.value
+  ))
+}))
+welch_tests[, p_holm_4_guides := p.adjust(p_welch, method = "holm")]
+knitr::kable(welch_tests, digits = 4)
+```
+
+### Specificity: lines targeting the other locus
+
+At each peak, the lines that target the other locus (on a different chromosome) are an additional
+set of controls. A locus-specific effect predicts control-like signal in those lines.
+
+```{r specificity}
+specificity <- rbindlist(Map(function(locus, other_target) {
+  cbind(
+    data.table(locus_label = locus, other_target = other_target),
+    run_wilcoxon(values_for(locus, targets = other_target), values_for(locus, targets = "control"))
+  )
+}, c("FAM111A_peak", "CDC37_peak"), c("CDC37", "FAM111A")))
+knitr::kable(
+  specificity[, .(locus_label, lines = paste(other_target, "-targeting lines"), n_test, n_control, fold_change_of_means, p_exact_two_sided)],
+  digits = 4
+)
+```
+
+## Plot
+
+```{r plot, fig.width=8, fig.height=4}
+annotated[, sgrna := factor(sgrna, levels = sgrna_labels)]
+annotated[, locus_label := factor(locus_label, levels = c("FAM111A_peak", "CDC37_peak"))]
+ggplot(annotated, aes(x = sgrna, y = mean_signal, fill = control_status)) +
+  geom_boxplot(width = 0.5, outlier.shape = NA) +
+  geom_point(position = position_jitter(width = 0.08, seed = 1), size = 1.5) +
+  facet_wrap(~locus_label, scales = "free_y") +
+  scale_fill_manual(values = c("targeting" = "#009E73", "non-targeting control" = "grey80")) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = "bottom") +
+  labs(x = NULL, y = "CTCF ChIP-seq signal (mean CPM over element)", fill = NULL)
+```
+
+## Per-guide CRISPRi effects (values behind the per-guide effect plots)
+
+The per-guide effect plots in `plots_for_paper.Rmd` use the singleton (per-guide) SCEPTRE results of the
+WTC11 screen, with guide positions lifted from hg19 to hg38.
+
+```{r per-guide-effects}
+singleton_df <- load_ctcf_element_guide_effects(
+  screen_dir = here("..", "results", "process_validation_datasets", "WTC11_DC_TAP_Seq"),
+  chain_path = here("data", "hg19ToHg38.over.chain")
+)
+
+# Motif centers used for the x-axis of the per-guide plots (ctcf_element_motifs_hg38.bed) and the
+# JASPAR 2024 CTCF hits (MA0139.2). The two FAM111A annotations differ by ~10 bp.
+motif_center <- function(bed, pattern) {
+  hit <- bed[grepl(pattern, name)]
+  (hit$start + hit$end) / 2
+}
+singleton_df[, locus := ifelse(guide_chr == "chr11", "FAM111A", "CDC37")]
+singleton_df[, plot_motif_center_hg38 := ifelse(
+  locus == "FAM111A",
+  motif_center(motifs_plot, "FAM111A_CTCF_Motif"),
+  motif_center(motifs_plot, "CDC37_CTCF_Motif_1")
+)]
+singleton_df[, jaspar_motif_center_hg38 := ifelse(
+  locus == "FAM111A",
+  motif_center(motifs_jaspar, "FAM111A"),
+  motif_center(motifs_jaspar, "CDC37_m1")
+)]
+singleton_df[, distance_to_plot_motif_center_bp := guide_start_hg38 - plot_motif_center_hg38]
+singleton_df[, distance_to_jaspar_motif_center_bp := guide_start_hg38 - jaspar_motif_center_hg38]
+singleton_df[, used_for_chip_lines := grna_id %in% libraries$sgrna_oligo_id]
+
+knitr::kable(
+  singleton_df[order(locus, guide_start_hg38), .(locus, grna_id, guide_start_hg38, distance_to_plot_motif_center_bp,
+                                                 pct_change_effect_size, lower_CI_95_pct_change, upper_CI_95_pct_change,
+                                                 p_value, used_for_chip_lines)],
+  digits = 3
+)
+```
+
+## sgRNA overlap with CTCF motifs (hg38, BED intervals)
+
+```{r motif-overlap}
+guides_bed[, grna_id := sub("^gRNA_", "WTC11_Random_Screen_", name)]
+guide_gr <- GRanges(guides_bed$chr, IRanges(guides_bed$start + 1, guides_bed$end), grna_id = guides_bed$grna_id)
+motif_gr <- GRanges(motifs_jaspar$chr, IRanges(motifs_jaspar$start + 1, motifs_jaspar$end), motif = motifs_jaspar$name, motif_score = motifs_jaspar$score)
+hits <- findOverlaps(guide_gr, motif_gr)
+motif_overlap <- data.table(
+  grna_id = guide_gr$grna_id[queryHits(hits)],
+  motif = motif_gr$motif[subjectHits(hits)],
+  motif_score = motif_gr$motif_score[subjectHits(hits)],
+  overlap_bp = width(pintersect(guide_gr[queryHits(hits)], motif_gr[subjectHits(hits)]))
+)
+knitr::kable(motif_overlap)
+```
+
+## Export source data
+
+```{r export}
+signal_source <- annotated[
+  order(locus_label, sgrna, replicate),
+  .(
+    locus = locus_label,
+    locus_hg38 = locus,
+    library = sample_id,
+    sequencing_library,
+    sgrna,
+    sgrna_oligo_id,
+    sgrna_hg38,
+    intended_target,
+    chip_replicate = replicate,
+    test_group,
+    pf_fragments,
+    ctcf_mean_cpm = mean_signal
+  )
+]
+fwrite(signal_source, file.path(source_data_dir, "ctcf_chip_signal_per_library.tsv"), sep = "\t")
+
+test_columns <- c(
+  "family", "locus_label", "guide", "comparison", "n_test", "n_control", "median_test_cpm", "median_control_cpm",
+  "fold_change_of_means", "W", "test_method", "p_exact_two_sided", "p_asymptotic_two_sided",
+  "hodges_lehmann_shift_cpm", "shift_ci_lower", "shift_ci_upper", "shift_ci_level", "min_attainable_p", "direction"
+)
+all_tests <- rbindlist(
+  list(
+    guide_tests[, c(test_columns, "p_holm_4_guides", "p_bh_4_guides"), with = FALSE],
+    locus_tests[, c(test_columns, "p_holm_2_loci"), with = FALSE]
+  ),
+  fill = TRUE
+)
+fwrite(all_tests, file.path(source_data_dir, "ctcf_chip_wilcoxon_tests.tsv"), sep = "\t")
+
+fwrite(
+  singleton_df[order(locus, guide_start_hg38)],
+  file.path(source_data_dir, "ctcf_elements_per_guide_crispri_effects.tsv"),
+  sep = "\t"
+)
+
+knitr::kable(all_tests[, .(family, comparison, n_test, n_control, W, p_exact_two_sided, p_holm_4_guides, p_bh_4_guides, p_holm_2_loci)], digits = 4)
+```

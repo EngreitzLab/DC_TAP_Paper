@@ -1,6 +1,10 @@
 # config file containing parameters
 configfile: "config/config.yml"
 
+# several R scripts save intermediate objects here
+import os
+os.makedirs("RDA_objects", exist_ok=True)
+
 # Include all rules for processing validation datasets
 include: "rules/sceptre_setup.smk"
 include: "rules/sceptre_power_analysis.smk"
@@ -13,6 +17,7 @@ include: "rules/formatting_dc_tap_results.smk"
 include: "rules/supplementary_tables.smk"
 include: "rules/main_figure_1_and_2.smk"
 include: "rules/main_figure_3.smk"
+include: "rules/main_figure_4_5_6.smk"
 include: "rules/duplicate_pairs_analysis.smk"
 
 include: "rules/figures_wo_positive_controls.smk"
@@ -30,7 +35,6 @@ rule create_main_figure_1_and_2:
     # Figure 1 plot
     dc_tap_x_qpcr_fig1 = "results/main_figure_1_and_2/compare_k562_effect_sizes_to_qPCR/comparison_positive_controls.pdf",
     wtc11_multi_moi_fig1 = "results/main_figure_1_and_2/wtc11_multi_moi.pdf",
-    read_umi_saturation_comparison = "results/main_figure_1_and_2/downsampling_reads_for_UMIs/read_umi_saturation_comparison.pdf",
     # Figure 2 plots
     k562_distance_by_es_fig2 = "results/main_figure_1_and_2/k562_distance_by_es.pdf",
     wtc11_distance_by_es_fig2 = "results/main_figure_1_and_2/wtc11_distance_by_es.pdf",
@@ -39,7 +43,8 @@ rule create_main_figure_1_and_2:
     k562_replicates_fig2 = "results/main_figure_1_and_2/compare_replicates/k562_plot.pdf", 
     wtc11_replicates_fig2 = "results/main_figure_1_and_2/compare_replicates/wtc11_plot.pdf", 
     dc_tap_x_qpcr_fig2 = "results/main_figure_1_and_2/compare_k562_effect_sizes_to_qPCR/comparison_others.pdf",
-    duplicates_plot_fig2 = "results/main_figure_1_and_2/duplicate_pairs_analysis/duplicate_pairs.pdf"
+    duplicates_plot_fig2 = "results/main_figure_1_and_2/duplicate_pairs_analysis/duplicate_pairs.pdf",
+    slc2a3_effect_sizes_fig2 = "results/main_figure_1_and_2/slc2a3_effect_size_barplot.pdf"
   output:
     touch("results/main_figure_1_and_2/create_main_figure_1_and_2.done")
     
@@ -50,8 +55,35 @@ rule create_main_figure_3:
     power_for_all_datasets_by_proportion = "results/main_figure_3/power_to_detect_change_for_all_datasets/power_for_all_datasets_by_proportion.pdf",
     power_for_all_datasets_by_count = "results/main_figure_3/power_to_detect_change_for_all_datasets/power_for_all_datasets_by_count.pdf"
   output:
-    touch("results/main_figure_3/craete_main_figure_3.done")
+    touch("results/main_figure_3/create_main_figure_3.done")
     
+# Main Figures 4-6 (and Fig. 3c; Extended Data Figs. 7, 15, 16b,c), from tables in the repository
+rule create_main_figures_4_5_6:
+  input:
+    rules.main_figure_4_direct_indirect_effects.output,
+    rules.extended_data_figure_15_direct_indirect_rates.output,
+    rules.extended_data_figure_16bc_genome_wide_indirect_effects.output,
+    rules.main_figure_5_chromatin_categories.output,
+    rules.main_figure_5_housekeeping_genes.output,
+    rules.main_figure_6_model_scores.output,
+    rules.main_figure_2e_dctap_vs_qpcr.output,
+    rules.main_figure_1cd_guide_capture_and_moi.output,
+    rules.main_figure_2i_slc2a3_qpcr.output,
+    rules.main_figure_2d_validation_vs_screen.output,
+    rules.main_figure_1e_umi_saturation.output
+
+# All data panels of main Figures 1-6. Figs. 2b, 2c, 3a and 3b use the final calls (FDR 20%,
+# positive controls excluded) from rules/figures_wo_positive_controls.smk.
+rule make_main_figures:
+  input:
+    "results/main_figure_1_and_2/create_main_figure_1_and_2.done",
+    "results/main_figure_3/create_main_figure_3.done",
+    rules.distance_by_effect_size_plots_FDR_wo_pos_controls.output,
+    rules.effect_size_plots_FDR_wo_pos_controls.output,
+    rules.compare_effect_sizes_to_other_screens_FDR_wo_pos_controls.output,
+    rules.power_to_detect_change_for_all_datasets_FDR_wo_pos_controls.output,
+    rules.create_main_figures_4_5_6.input
+
 # Create the supplementary tables
 rule create_all_supplementary_tables:
   input:

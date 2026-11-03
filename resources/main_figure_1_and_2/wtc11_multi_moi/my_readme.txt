@@ -1,1 +1,1 @@
-This file came from : https://raw.githubusercontent.com/EngreitzLab/DC_TAP_paper/refs/heads/main/inputs_for_fig1/wtc11_all_moi_mast_tab.txt which is Evvie's offboarding github repository
+- wtc11_all_moi_mast_tab.txt: MAST differential expression results for the WTC11 multi-MOI pilot screens (rule wtc11_multi_moi, Fig. 2d).
