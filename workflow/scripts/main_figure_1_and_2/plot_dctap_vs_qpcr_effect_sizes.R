@@ -23,7 +23,7 @@ dctap_vs_qpcr_plot <- ggplot(effect_sizes, aes(x = qpcr_pctChange, y = dctap_pct
   geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
   annotate("text", x = -95, y = -5, label = paste0("R = ", round(pearson_r, 2)), hjust = 0, size = 5) +
   labs(x = "qPCR Effect Size (%)", y = "DC-TAP-seq Effect Size (%)", color = "Target Type", shape = "Cell Type") +
-  scale_color_grey(start = 0.2, end = 0.6) +
+  scale_color_grey(start = 0.2, end = 0.6, labels = c(Enhancer = "Distal Element", TSS = "Self Promoter")) +
   coord_cartesian(xlim = c(-100, 0), ylim = c(-100, 0)) +
   theme_bw() +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border = element_blank(),

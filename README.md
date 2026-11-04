@@ -84,14 +84,14 @@ Figures 4–6 and Extended Data Figs. 7, 15, 16b,c only: `pixi run snakemake --c
 |---|---|---|---|
 | 1c, 1d | `main_figure_1cd_guide_capture_and_moi` | `workflow/scripts/main_figure_1_and_2/plot_guide_capture_and_moi_knockdown.R` | `results/main_figure_1_and_2/guide_capture_and_moi_knockdown/` |
 | 1e | `main_figure_1e_umi_saturation` | `workflow/scripts/main_figure_1_and_2/plot_umi_saturation_dctap_vs_scrna.R` | `results/main_figure_1_and_2/umi_saturation_dctap_vs_scrna/` |
-| 2b | `distance_by_effect_size_plots` | `workflow/scripts/main_figure_1_and_2/distance_by_effect_size_plots.R` | `results/main_figure_1_and_2/{k562,wtc11}_distance_by_es.pdf` |
-| 2c | `effect_size_plots` | `workflow/scripts/main_figure_1_and_2/effect_size_plots.R` | `results/main_figure_1_and_2/effect_size_boxplot.pdf` |
+| 2b | `distance_by_effect_size_plots_FDR_wo_pos_controls` | `workflow/scripts/figures_wo_positive_controls/distance_by_effect_size_plots.R` | `results/figures_wo_positive_controls/{k562,wtc11}_distance_by_es.pdf` |
+| 2c | `effect_size_plots_FDR_wo_pos_controls` | `workflow/scripts/figures_wo_positive_controls/effect_size_plots.R` | `results/figures_wo_positive_controls/effect_size_boxplot.pdf` |
 | 2d | `wtc11_multi_moi`, `make_replicates_plots`, `main_figure_2d_validation_vs_screen` | `workflow/scripts/main_figure_1_and_2/`, `validations/analyses/2026-05-14_compare_low_high_es/compare_es.Rmd` | `results/main_figure_1_and_2/`, `validations/results/2026-05-14_compare_low_high_es/` |
 | 2e | `main_figure_2e_dctap_vs_qpcr` | `workflow/scripts/main_figure_1_and_2/plot_dctap_vs_qpcr_effect_sizes.R` | `results/main_figure_1_and_2/qpcr_validation/` |
 | 2f | `find_duplicate_pairs` | `workflow/scripts/main_figure_1_and_2/find_duplicate_pairs.R` | `results/main_figure_1_and_2/duplicate_pairs_analysis/duplicate_pairs.pdf` |
 | 2h | `slc2a3_effect_size_plot` | `workflow/scripts/main_figure_1_and_2/slc2a3_effect_size_plot.R` | `results/main_figure_1_and_2/slc2a3_effect_size_barplot.pdf` |
 | 2i | `main_figure_2i_slc2a3_qpcr` | `workflow/scripts/main_figure_1_and_2/plot_slc2a3_qpcr.R` | `results/main_figure_1_and_2/qpcr_validation/` |
-| 3a, 3b | `compare_effect_sizes_to_other_screens`, `power_to_detect_change_for_all_datasets` | `workflow/scripts/main_figure_3/` | `results/main_figure_3/` |
+| 3a, 3b | `compare_effect_sizes_to_other_screens_FDR_wo_pos_controls`, `power_to_detect_change_for_all_datasets_FDR_wo_pos_controls` | `workflow/scripts/figures_wo_positive_controls/` | `results/figures_wo_positive_controls/` |
 | 3c, 5b–d | `main_figure_5_chromatin_categories`, `main_figure_5_housekeeping_genes` | `results/main_figure_5_and_6/chromatin_categories_and_power_estimation.R`, `housekeeping_genes.R` | `results/main_figure_5_and_6/` |
 | 4b–d, ED 7 | `main_figure_4_direct_indirect_effects` | `results/main_figure_4_and_extdata_figure_7/dc_tapseq_indirect_effects_main_analyses.Rmd` | `results/main_figure_4_and_extdata_figure_7/plots/` |
 | 6a–d, ED 13 | `main_figure_6_model_scores` | `results/main_figure_5_and_6/model_scores.R` | `results/main_figure_5_and_6/e2g_model_scores/` |
