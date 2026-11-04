@@ -280,6 +280,10 @@ plot_percent_positive_enrichment_effect_size_combined <- function(crispr, group_
         axis.ticks = element_line(color = "#000000"), axis.ticks.x = element_blank(),
         legend.position = "none")
 
+    if (significance_var == "Regulated") {
+      fwrite(select(es, Dataset, elementName, measuredGeneSymbol, category, EffectSize),
+             paste0(out_prefix, group_var, "_regulated_effect_sizes_per_pair.tsv"), sep = "\t")
+    }
     plots[[significance_var]] <- list(p1, p2, p3, p4)
     combined_pct_pos[[significance_var]] <- rbind(pct_pos, pct_pos_pairs) %>% select(-n_label, -prop_adjust)
     combined_enr[[significance_var]] <- enr %>% select(-sign_label)
@@ -429,7 +433,7 @@ compare_metrics_across_groups <- function(crispr, group_var, out_prefix, pairs =
       group_by(Dataset, pick(all_of(summarize_pairs_vars))) %>%
       mutate(anyRegulated = max(positive_indicator)) %>%
       ungroup() %>%
-      select(all_of(summarize_vars), Dataset, anyRegulated, category) %>%
+      select(all_of(summarize_pairs_vars), Dataset, anyRegulated, category) %>%
       distinct() %>%
       group_by(Dataset, category) %>%
       summarize(n_total = n(), n_hit = sum(anyRegulated), hit_rate = n_hit / n_total, .groups = "drop")
@@ -619,4 +623,74 @@ read_dc_tap_table_s3 <- function(crispr_path, filter_to_random_DEG = TRUE) {
         select(-pct_change_effect_size)
 
     return(res)
+}
+
+
+# Fig. 5c (fraction of E-G pairs with a significant negative effect, direct-effect weighted) and
+# Fig. 5d (effect sizes of significant negative effects, p(direct) > 0.5) by promoter class.
+# p-values: prop.test on E-G pair hit rates (5c) and Wilcoxon rank-sum (5d), unadjusted, from
+# compare_metrics_across_groups().
+plot_fig5c_5d_by_promoter_class <- function(comparison_dir, significance_dir, out_dir) {
+  cp <- c(`Ubiq. expr. gene` = "#792374", `Other gene` = "#b778b3")
+  dataset_labels <- c(DC_TAP = "DC-TAP-seq", Gasperini2019 = "Gasperini et al.")
+  p_label <- function(p) {
+    ifelse(p >= 0.05, "n.s.",
+           sprintf("p == %s %%*%% 10^%d", formatC(p / 10^floor(log10(p)), format = "f", digits = 2), as.integer(floor(log10(p)))))
+  }
+  bracket_layers <- function(pvals, y, tick) {
+    pvals <- mutate(pvals, x1 = 1, x2 = 2, x_mid = 1.5, y_bar = y, y_tick = y - tick, y_text = y + 1.5 * tick)
+    list(geom_segment(data = pvals, aes(x = x1, xend = x2, y = y_bar, yend = y_bar), inherit.aes = FALSE, linewidth = 0.3),
+         geom_segment(data = pvals, aes(x = x1, xend = x1, y = y_bar, yend = y_tick), inherit.aes = FALSE, linewidth = 0.3),
+         geom_segment(data = pvals, aes(x = x2, xend = x2, y = y_bar, yend = y_tick), inherit.aes = FALSE, linewidth = 0.3),
+         geom_text(data = pvals, aes(x = x_mid, y = y_text, label = label), parse = TRUE, inherit.aes = FALSE, size = 3))
+  }
+  panel_theme <- theme_classic() +
+    theme(strip.background = element_blank(), strip.text = element_text(size = 11, face = "bold"),
+          axis.text = element_text(size = 9, color = "#000000"), axis.ticks = element_line(color = "#000000"),
+          legend.position = "none")
+  read_p <- function(file, metric) {
+    fread(file) %>% filter(significance == "Regulated", metric == !!metric) %>%
+      transmute(Dataset, DatasetLabel = factor(dataset_labels[Dataset], levels = dataset_labels), p_value, label = p_label(p_value))
+  }
+
+  # Fig. 5c
+  hit_rates <- fread(file.path(comparison_dir, "weighted_ubiq_category_crispr_results_combined_percent_positives.tsv")) %>%
+    filter(significance == "Regulated", grouped_by == "E-G pairs") %>%
+    mutate(DatasetLabel = factor(dataset_labels[Dataset], levels = dataset_labels),
+           category = factor(category, levels = names(cp)))
+  p5c_vals <- read_p(file.path(significance_dir, "weighted_ubiq_category.signficance_table.by_Category.tsv"), "HitRate_pairs")
+  y_top <- max(hit_rates$CI_prop_high) * 1.1
+  p5c <- ggplot(hit_rates, aes(x = category, y = prop_positive_elements, fill = category)) +
+    geom_col(width = 1) +
+    geom_linerange(aes(ymin = CI_prop_low, ymax = CI_prop_high), linewidth = 0.4) +
+    bracket_layers(p5c_vals, y_top, y_top * 0.03) +
+    facet_wrap(~DatasetLabel, nrow = 1) +
+    scale_x_discrete(labels = NULL) +
+    scale_y_continuous(labels = function(x) paste0(format(x * 100, nsmall = 2), "%"), expand = c(0, 0)) +
+    geom_text(aes(y = -y_top * 0.05, label = format_number(n_positive_category)), size = 3) +
+    coord_cartesian(ylim = c(0, y_top * 1.15), clip = "off") +
+    scale_fill_manual(values = cp) +
+    labs(x = "# positives (weighted)", y = "DE-G pairs with significant effect (%)") +
+    panel_theme + theme(axis.title.x = element_text(margin = margin(t = 12)))
+  ggsave(file.path(out_dir, "fig5c_significant_negative_pairs_by_promoter_class.pdf"), p5c, height = 4, width = 3.5)
+
+  # Fig. 5d
+  effect_sizes <- fread(file.path(comparison_dir, "filter50_ubiq_category_regulated_effect_sizes_per_pair.tsv")) %>%
+    mutate(DatasetLabel = factor(dataset_labels[Dataset], levels = dataset_labels),
+           category = factor(category, levels = names(cp)))
+  n_pairs <- count(effect_sizes, DatasetLabel, category)
+  p5d_vals <- read_p(file.path(significance_dir, "filter50_ubiq_category.signficance_table.by_Category.tsv"), "EffectSize")
+  p5d <- ggplot(effect_sizes, aes(x = category, y = EffectSize, fill = category)) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "#c5cad7") +
+    geom_boxplot(width = 0.8, outlier.shape = 16, outlier.size = 0.75, aes(color = category), fill = NA) +
+    geom_boxplot(width = 0.8, outlier.shape = NA, alpha = 1, color = "black") +
+    bracket_layers(p5d_vals, 4, 1.5) +
+    geom_text(data = n_pairs, aes(x = category, y = -88, label = n), inherit.aes = FALSE, size = 3) +
+    facet_wrap(~DatasetLabel, nrow = 1) +
+    scale_x_discrete(labels = NULL) +
+    scale_y_continuous(limits = c(-90, 8)) +
+    scale_fill_manual(values = cp) + scale_color_manual(values = cp) +
+    labs(x = "# positives", y = "Effect on gene expression (%)") +
+    panel_theme
+  ggsave(file.path(out_dir, "fig5d_effect_size_by_promoter_class.pdf"), p5d, height = 4, width = 3.5)
 }

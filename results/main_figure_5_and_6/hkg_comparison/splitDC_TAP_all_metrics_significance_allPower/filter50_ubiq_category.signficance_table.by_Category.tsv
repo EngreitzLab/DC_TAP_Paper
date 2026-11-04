@@ -1,16 +1,16 @@
 Dataset	group1	group2	group1_value	group2_value	p_value	test	metric	significance	p_value_adj
 K562_DC_TAP	Other gene	Ubiq. expr. gene	0.0341880341880342	0.0673076923076923	0.412116470551788	prop.test	HitRate_genes	Significant	0.824232941103577
 WTC11_DC_TAP	Other gene	Ubiq. expr. gene	0.14	0.155172413793103	0.978732576484179	prop.test	HitRate_genes	Significant	0.978732576484179
-K562_DC_TAP	Other gene	Ubiq. expr. gene	0.0330578512396694	0.0630630630630631	0.444252873857256	prop.test	HitRate_pairs	Significant	0.888505747714511
-WTC11_DC_TAP	Other gene	Ubiq. expr. gene	0.12280701754386	0.134328358208955	1	prop.test	HitRate_pairs	Significant	1
+K562_DC_TAP	Other gene	Ubiq. expr. gene	0.00147329650092081	0.00389441800086543	0.159847914400638	prop.test	HitRate_pairs	Significant	0.319695828801275
+WTC11_DC_TAP	Other gene	Ubiq. expr. gene	0.00801114594218043	0.00954653937947494	0.707688379520362	prop.test	HitRate_pairs	Significant	0.707688379520362
 K562_DC_TAP	Other gene	Ubiq. expr. gene	0.569599093356	1.50564191325766	0.175053626822658	log_enrichment_z	Enrichment	Significant	0.350107253645316
 WTC11_DC_TAP	Other gene	Ubiq. expr. gene	0.934017451258831	1.11302857842237	0.656952942684527	log_enrichment_z	Enrichment	Significant	0.656952942684527
 K562_DC_TAP	Other gene	Ubiq. expr. gene	12.4852929445	4.961121065	0.0111888111888112	wilcox	EffectSize	Significant	0.0111888111888112
 WTC11_DC_TAP	Other gene	Ubiq. expr. gene	7.345293782	3.3090762845	0.000145065157101234	wilcox	EffectSize	Significant	0.000290130314202469
 K562_DC_TAP	Other gene	Ubiq. expr. gene	0.0254237288135593	0.0673076923076923	0.239109549102072	prop.test	HitRate_genes	Regulated	0.478219098204144
 WTC11_DC_TAP	Other gene	Ubiq. expr. gene	0.14	0.155172413793103	0.978732576484179	prop.test	HitRate_genes	Regulated	0.978732576484179
-K562_DC_TAP	Other gene	Ubiq. expr. gene	0.0247933884297521	0.0630630630630631	0.266918161434409	prop.test	HitRate_pairs	Regulated	0.533836322868818
-WTC11_DC_TAP	Other gene	Ubiq. expr. gene	0.12280701754386	0.134328358208955	1	prop.test	HitRate_pairs	Regulated	1
+K562_DC_TAP	Other gene	Ubiq. expr. gene	0.00109930377427629	0.00387263339070568	0.0838747225285761	prop.test	HitRate_pairs	Regulated	0.167749445057152
+WTC11_DC_TAP	Other gene	Ubiq. expr. gene	0.00793103448275862	0.00952380952380953	0.690241339863711	prop.test	HitRate_pairs	Regulated	0.690241339863711
 K562_DC_TAP	Other gene	Ubiq. expr. gene	0.462898497618175	1.63070137693632	0.106870168512738	log_enrichment_z	Enrichment	Regulated	0.213740337025476
 WTC11_DC_TAP	Other gene	Ubiq. expr. gene	0.931388152077807	1.11843711843712	0.642984325599817	log_enrichment_z	Enrichment	Regulated	0.642984325599817
 K562_DC_TAP	Other gene	Ubiq. expr. gene	-6.740620209	-4.961121065	0.0363636363636364	wilcox	EffectSize	Regulated	0.0363636363636364

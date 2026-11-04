@@ -1,16 +1,16 @@
 Dataset	group1	group2	group1_value	group2_value	p_value	test	metric	significance	p_value_adj
 DC_TAP	Other gene	Ubiq. expr. gene	0.344370860927152	0.319327731092437	0.761607723175913	prop.test	HitRate_genes	Significant	0.761607723175913
 Gasperini2019	Other gene	Ubiq. expr. gene	0.428888888888889	0.0963081861958267	2.52735315910071e-44	prop.test	HitRate_genes	Significant	5.05470631820143e-44
-DC_TAP	Other gene	Ubiq. expr. gene	0.272251308900524	0.246753246753247	0.679715918135441	prop.test	HitRate_pairs	Significant	0.679715918135441
-Gasperini2019	Other gene	Ubiq. expr. gene	0.402502606882169	0.0925925925925926	7.58742153343254e-42	prop.test	HitRate_pairs	Significant	1.51748430668651e-41
+DC_TAP	Other gene	Ubiq. expr. gene	0.0345809601301872	0.0250208507089241	0.0611211207802864	prop.test	HitRate_pairs	Significant	0.0611211207802864
+Gasperini2019	Other gene	Ubiq. expr. gene	0.282296650717703	0.0428226779252111	1.80448545491975e-79	prop.test	HitRate_pairs	Significant	3.6089709098395e-79
 DC_TAP	Other gene	Ubiq. expr. gene	1.15810443029096	0.837939662362313	0.109968537899178	log_enrichment_z	Enrichment	Significant	0.109968537899178
 Gasperini2019	Other gene	Ubiq. expr. gene	1.65954791842185	0.251743284347711	6.94128717786247e-46	log_enrichment_z	Enrichment	Significant	1.38825743557249e-45
 DC_TAP	Other gene	Ubiq. expr. gene	6.889820987	4.06119382	1.46671104250045e-05	wilcox	EffectSize	Significant	1.46671104250045e-05
 Gasperini2019	Other gene	Ubiq. expr. gene	27.0180974850533	12.1513435260152	7.73974021733061e-19	wilcox	EffectSize	Significant	1.54794804346612e-18
 DC_TAP	Other gene	Ubiq. expr. gene	0.158940397350993	0.19327731092437	0.563858860888089	prop.test	HitRate_genes	Regulated	0.563858860888089
 Gasperini2019	Other gene	Ubiq. expr. gene	0.388888888888889	0.0818619582664527	1.85025264983094e-40	prop.test	HitRate_genes	Regulated	3.70050529966188e-40
-DC_TAP	Other gene	Ubiq. expr. gene	0.138728323699422	0.163120567375887	0.657324250013931	prop.test	HitRate_pairs	Regulated	0.657324250013931
-Gasperini2019	Other gene	Ubiq. expr. gene	0.367647058823529	0.0790697674418605	1.39179394411523e-38	prop.test	HitRate_pairs	Regulated	2.78358788823046e-38
+DC_TAP	Other gene	Ubiq. expr. gene	0.016680227827502	0.0179316096747289	0.822510065339598	prop.test	HitRate_pairs	Regulated	0.822510065339598
+Gasperini2019	Other gene	Ubiq. expr. gene	0.261031366294524	0.0367913148371532	8.26453421602683e-75	prop.test	HitRate_pairs	Regulated	1.65290684320537e-74
 DC_TAP	Other gene	Ubiq. expr. gene	0.96427602774226	1.03661781643433	0.784857144872802	log_enrichment_z	Enrichment	Regulated	0.784857144872802
 Gasperini2019	Other gene	Ubiq. expr. gene	1.67353261832667	0.235877650740372	6.3444917267383e-43	log_enrichment_z	Enrichment	Regulated	1.26889834534766e-42
 DC_TAP	Other gene	Ubiq. expr. gene	-6.715053283	-3.402919733	8.18752796325649e-05	wilcox	EffectSize	Regulated	8.18752796325649e-05
