@@ -71,7 +71,8 @@ rule main_figure_5_chromatin_categories:
   output:
     fig5b = "results/main_figure_5_and_6/categorized_pairs/proportion_by_cell_type.element_category.de_weighted.combine_dc_tap.pdf",
     fig5b_by_cell_type = "results/main_figure_5_and_6/categorized_pairs/proportion_by_cell_type.element_category.de_weighted.for_dc_tap.pdf",
-    fig5c = "results/main_figure_5_and_6/housekeeping_genes/v3_combinedDC_TAP_all_metrics_comparison_allPower/weighted_ubiq_category_crispr_results_combined_percent_positives.tsv",
+    fig5c = "results/main_figure_5_and_6/housekeeping_genes/fig5c_significant_negative_pairs_by_promoter_class.pdf",
+    fig5d = "results/main_figure_5_and_6/housekeeping_genes/fig5d_effect_size_by_promoter_class.pdf",
     fig3c = "results/main_figure_5_and_6/housekeeping_genes/detected_positives/5_10_positives_by_effect_size_and_rate.Regulated.pdf"
   log: "results/main_figure_5_and_6/logs/main_figure_5_chromatin_categories.log"
   shell:

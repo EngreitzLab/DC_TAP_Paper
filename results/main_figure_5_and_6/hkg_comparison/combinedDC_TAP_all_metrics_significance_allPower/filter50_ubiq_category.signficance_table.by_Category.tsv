@@ -1,9 +1,9 @@
 Dataset	group1	group2	group1_value	group2_value	p_value	test	metric	significance	p_value_adj
 DC_TAP	Other gene	Ubiq. expr. gene	0.0849056603773585	0.105960264900662	0.61998782411516	prop.test	HitRate_genes	Significant	0.61998782411516
-DC_TAP	Other gene	Ubiq. expr. gene	0.0782608695652174	0.0958083832335329	0.663459470707363	prop.test	HitRate_pairs	Significant	0.663459470707363
+DC_TAP	Other gene	Ubiq. expr. gene	0.00483351235230935	0.00627037873087534	0.422624011121592	prop.test	HitRate_pairs	Significant	0.422624011121592
 DC_TAP	Other gene	Ubiq. expr. gene	0.889831033628026	1.15435260751288	0.442521074376157	log_enrichment_z	Enrichment	Significant	0.442521074376157
 DC_TAP	Other gene	Ubiq. expr. gene	7.345293782	3.556232361	2.43190648529373e-05	wilcox	EffectSize	Significant	2.43190648529373e-05
 DC_TAP	Other gene	Ubiq. expr. gene	0.07981220657277	0.105960264900662	0.502354038731086	prop.test	HitRate_genes	Regulated	0.502354038731086
-DC_TAP	Other gene	Ubiq. expr. gene	0.0739130434782609	0.0958083832335329	0.551182276486714	prop.test	HitRate_pairs	Regulated	0.551182276486714
+DC_TAP	Other gene	Ubiq. expr. gene	0.0046189376443418	0.00624375624375624	0.346922597068984	prop.test	HitRate_pairs	Regulated	0.346922597068984
 DC_TAP	Other gene	Ubiq. expr. gene	0.872435810351854	1.17933537051184	0.378294845789998	log_enrichment_z	Enrichment	Regulated	0.378294845789998
 DC_TAP	Other gene	Ubiq. expr. gene	-7.1175573845	-3.556232361	4.4296263229789e-05	wilcox	EffectSize	Regulated	4.4296263229789e-05

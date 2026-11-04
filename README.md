@@ -92,7 +92,7 @@ Figures 4–6 and Extended Data Figs. 7, 15, 16b,c only: `pixi run snakemake --c
 | 2h | `slc2a3_effect_size_plot` | `workflow/scripts/main_figure_1_and_2/slc2a3_effect_size_plot.R` | `results/main_figure_1_and_2/slc2a3_effect_size_barplot.pdf` |
 | 2i | `main_figure_2i_slc2a3_qpcr` | `workflow/scripts/main_figure_1_and_2/plot_slc2a3_qpcr.R` | `results/main_figure_1_and_2/qpcr_validation/` |
 | 3a, 3b | `compare_effect_sizes_to_other_screens_FDR_wo_pos_controls`, `power_to_detect_change_for_all_datasets_FDR_wo_pos_controls` | `workflow/scripts/figures_wo_positive_controls/` | `results/figures_wo_positive_controls/` |
-| 3c, 5b–d | `main_figure_5_chromatin_categories`, `main_figure_5_housekeeping_genes` | `results/main_figure_5_and_6/chromatin_categories_and_power_estimation.R`, `housekeeping_genes.R` | `results/main_figure_5_and_6/` |
+| 3c, 5b–d | `main_figure_5_chromatin_categories` | `results/main_figure_5_and_6/chromatin_categories_and_power_estimation.R` | `results/main_figure_5_and_6/` (5c, 5d: `housekeeping_genes/fig5{c,d}_*.pdf`) |
 | 4b–d, ED 7 | `main_figure_4_direct_indirect_effects` | `results/main_figure_4_and_extdata_figure_7/dc_tapseq_indirect_effects_main_analyses.Rmd` | `results/main_figure_4_and_extdata_figure_7/plots/` |
 | 6a–d, ED 13 | `main_figure_6_model_scores` | `results/main_figure_5_and_6/model_scores.R` | `results/main_figure_5_and_6/e2g_model_scores/` |
 | ED 15 | `extended_data_figure_15_direct_indirect_rates` | `results/extended_data_figure_15/dc_tapseq_indirect_effects_extdata_fig15.Rmd` | `results/extended_data_figure_15/` |

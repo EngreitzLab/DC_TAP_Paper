@@ -588,6 +588,8 @@ for (use_allpower in c(TRUE, FALSE)){
     compare_metrics_across_groups(crispr = crispr_sceptre_use, group_var = group_var, out_prefix = out_prefix2, pairs = "Category", all_power = use_allpower,
         direct_effect_weighted = FALSE, direct_effect_threshold = 0)
 }
+plot_fig5c_5d_by_promoter_class(file.path(this_results_dir, "v3_combinedDC_TAP_all_metrics_comparison_allPower"),
+    file.path(this_results_dir, "v3_combinedDC_TAP_all_metrics_significance_allPower"), this_results_dir)
 
 ### --- ESTIMATE UNDETECTED VS DETECTED SIGNIFICANT POSITIVES ---
 this_out <- file.path(this_results_dir, "detected_positives"); dir.create(this_out, showWarnings = FALSE)
