@@ -66,7 +66,8 @@ seqspec/.python-version
 
 # Validations
 validations/data/
-validations/results/
+validations/results/*
+!validations/results/2026-05-14_compare_low_high_es/
 validations/.venv
 validations/src/python/__pycache__/
 
@@ -79,3 +80,6 @@ HANDOFF.md
 validations/data/
 resources/zenodo_download/
 resources/e2g_predictions/
+
+# R default graphics device output
+Rplots.pdf

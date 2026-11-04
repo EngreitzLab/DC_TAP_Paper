@@ -20,8 +20,6 @@ message("Loading in packages")
 suppressPackageStartupMessages({
   library(tidyverse)
   library(GenomicRanges)
-  library(Seurat)
-  library(SingleCellExperiment)
 })
 
 message("Loading input files")
@@ -111,8 +109,8 @@ comparing_all_duplicate_pairs <- ggplot(plot_data,
     color = "Regulated Status"
   ) +
   theme_bw() +
-  ylim(-50, 20) +
-  xlim(-50, 20) +
+  ylim(-50, 25) +
+  xlim(-50, 25) +
   scale_color_manual(
     values = c("darkblue" = "darkblue"),
     labels = c("darkblue" = "DC TAP & Gasperini")

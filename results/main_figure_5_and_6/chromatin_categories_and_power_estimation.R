@@ -337,12 +337,12 @@ plot_positives_by_effect_size <- function(crispr, es_bins, bin_min, bin_max, sig
     res <- res %>% 
         mutate(DatasetLabel = dataset_key[Dataset],
             DatasetLabel = factor(DatasetLabel, levels = unique(dataset_key), ordered = TRUE),
-            positiveRate = ifelse(sum_testedPower == 0, 0, positiveRate))
+            undetectedPerDetected = ifelse(nDetectedPositive == 0, 0, nUndetectedPositive / nDetectedPositive))
 
-    p2 <- ggplot(res, aes(x = EffectSize_bin, y = positiveRate)) +
+    p2 <- ggplot(res, aes(x = EffectSize_bin, y = undetectedPerDetected)) +
         geom_bar(stat = "identity", fill = "#1c2a43") +
-        facet_wrap(~DatasetLabel, ncol = 2, scales = "fixed") +
-        labs(x = "Effect size bin", y = "Positive rate\n(Detected positives / sum (power of tested pairs))") +
+        facet_wrap(~DatasetLabel, ncol = 2, scales = "free_y") +
+        labs(x = "Effect size bin", y = "Undetected / detected\npositive pairs") +
         theme_classic() + theme(
             strip.background = element_blank(), panel.grid = element_blank(), strip.text = element_blank(),
             axis.text = element_text(size = 10, color = "#000000"), axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
