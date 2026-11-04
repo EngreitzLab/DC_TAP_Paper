@@ -80,3 +80,6 @@ HANDOFF.md
 validations/data/
 resources/zenodo_download/
 resources/e2g_predictions/
+
+# R default graphics device output
+Rplots.pdf
