@@ -84,7 +84,7 @@ Figures 4–6 and Extended Data Figs. 7, 15, 16b,c only: `pixi run snakemake --c
 |---|---|---|---|
 | 1c, 1d | `main_figure_1cd_guide_capture_and_moi` | `workflow/scripts/main_figure_1_and_2/plot_guide_capture_and_moi_knockdown.R` | `results/main_figure_1_and_2/guide_capture_and_moi_knockdown/` |
 | 1e | `main_figure_1e_umi_saturation` | `workflow/scripts/main_figure_1_and_2/plot_umi_saturation_dctap_vs_scrna.R` | `results/main_figure_1_and_2/umi_saturation_dctap_vs_scrna/` |
-| 2b | `distance_by_effect_size_plots_FDR_wo_pos_controls` | `workflow/scripts/figures_wo_positive_controls/distance_by_effect_size_plots.R` | `results/figures_wo_positive_controls/{k562,wtc11}_distance_by_es.pdf` |
+| 2b | `distance_by_effect_size_plots_FDR_wo_pos_controls` | `workflow/scripts/figures_wo_positive_controls/distance_by_effect_size_plots.R` | `results/figures_wo_positive_controls/k562_wtc11_distance_by_es.pdf` |
 | 2c | `effect_size_plots_FDR_wo_pos_controls` | `workflow/scripts/figures_wo_positive_controls/effect_size_plots.R` | `results/figures_wo_positive_controls/effect_size_boxplot.pdf` |
 | 2d | `wtc11_multi_moi`, `make_replicates_plots`, `main_figure_2d_validation_vs_screen` | `workflow/scripts/main_figure_1_and_2/`, `validations/analyses/2026-05-14_compare_low_high_es/compare_es.Rmd` | `results/main_figure_1_and_2/`, `validations/results/2026-05-14_compare_low_high_es/` |
 | 2e | `main_figure_2e_dctap_vs_qpcr` | `workflow/scripts/main_figure_1_and_2/plot_dctap_vs_qpcr_effect_sizes.R` | `results/main_figure_1_and_2/qpcr_validation/` |
