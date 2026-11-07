@@ -59,7 +59,7 @@ plot_distance_by_es <- function(df, cell_type_to_plot) {
     geom_hline(yintercept = 0, linetype = "dashed", color = "black") +  # Dotted line at y = 0
     scale_color_manual(values = c("Positive" = "blue", "Negative" = "red", "Non-significant" = "grey"),
                        labels = c("Positive" = "Pos.", "Negative" = "Neg.", "Non-significant" = "Non-sig")) +
-    ylim(-100, 100) +
+    scale_y_continuous(limits = c(-40, 50), breaks = c(-25, 0, 25, 50)) +  # range of the published panel
     labs(title = "Distance by Effect Size",
          subtitle = paste0(cell_type_to_plot, " discovery pairs"),
          x = "Distance to TSS (Mb)", 
