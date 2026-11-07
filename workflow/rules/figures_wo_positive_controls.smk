@@ -7,10 +7,10 @@ rule distance_by_effect_size_plots_FDR_wo_pos_controls:
     screen_results = "results/formatted_dc_tap_results/Table_S3_Final_DC_TAP_Seq_Results_w_Chromatin_Categories_on_resized_and_merged_elements_250908_append.tsv"
   output:
     k562_distance_by_es = "results/figures_wo_positive_controls/k562_distance_by_es.pdf",
-    wtc11_distance_by_es = "results/figures_wo_positive_controls/wtc11_distance_by_es.pdf"
+    wtc11_distance_by_es = "results/figures_wo_positive_controls/wtc11_distance_by_es.pdf",
+    k562_wtc11_distance_by_es = "results/figures_wo_positive_controls/k562_wtc11_distance_by_es.pdf"
   log: "results/figures_wo_positive_controls/logs/distance_by_effect_size_plots.log"
-  conda:
-    "../envs/analyze_crispr_screen.yml"
+  # runs in the top-level pixi environment (pixi.toml)
   resources:
     mem = "8G",
     time = "1:00:00"
