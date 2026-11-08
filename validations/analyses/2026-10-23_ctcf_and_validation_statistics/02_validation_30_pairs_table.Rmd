@@ -6,7 +6,9 @@ params:
 ---
 
 Original screen and validation estimates for the 30 selected WTC11 element-gene pairs, per SCEPTRE
-run, with uncertainty and significance calls.
+run, with uncertainty and significance calls. The 30 pairs are 28 DE-G pairs
+(`Random_DistalElement_Gene` in Table S3: 23 original hits and 5 original non-hits), the TP53
+self-promoter pair, and an element in an intron of its target gene (SLC2A3).
 
 The heatmap (`analyses/2026-05-13_get_statistics/results_statistics.Rmd`) and the effect-size scatter
 plots (`analyses/2026-05-14_compare_low_high_es/compare_es.Rmd`) use the pooled runs
@@ -52,6 +54,8 @@ selected <- table_s3[
     element_hg38 = intended_target_name_hg38,
     element_category,
     distal_element_gene_pair = DistalElement_Gene,
+    random_distal_element_gene = Random_DistalElement_Gene,
+    gene_body_overlap = gencode_protein_coding_gene_body_overlap,
     self_promoter = selfPromoter,
     positive_control_self_promoter = Positive_Control_selfPromoter,
     included_in_fdr = include_in_fdr,
@@ -73,6 +77,7 @@ stopifnot(nrow(selected) == 30, uniqueN(selected$pair) == 30)
 
 selected[, pair_class := fcase(
   included_in_fdr %in% FALSE, "Self-promoter pair (not in FDR set)",
+  random_distal_element_gene %in% FALSE, "Element in target gene body (not a DE-G pair)",
   original_significant_20fdr %in% TRUE, "Original hit (20% FDR)",
   default = "Original non-hit"
 )]
@@ -83,7 +88,8 @@ knitr::kable(selected[, .N, by = .(pair_class, call_in_figures)])
 knitr::kable(
   selected[pair_class != "Original hit (20% FDR)",
            .(pair, pair_class, self_promoter, positive_control_self_promoter, included_in_fdr,
-             original_pct_change, original_p_value, original_adj_p_value)],
+             random_distal_element_gene, gene_body_overlap, original_pct_change, original_p_value,
+             original_adj_p_value)],
   digits = 4
 )
 ```
@@ -181,13 +187,14 @@ summary_by_run <- validation[
     hits <- pair_class == "Original hit (20% FDR)"
     non_hits <- pair_class == "Original non-hit"
     promoter <- pair_class == "Self-promoter pair (not in FDR set)"
+    de_g <- random_distal_element_gene %in% TRUE
     data.table(
       original_hits_significant = sprintf("%d / %d", sum(significant_10fdr[hits]), sum(hits)),
       original_hits_same_direction = sprintf("%d / %d", sum(sign(pct_change[hits]) == sign(original_pct_change[hits])), sum(hits)),
       original_nonhits_significant = sprintf("%d / %d", sum(significant_10fdr[non_hits]), sum(non_hits)),
       tp53_promoter_pair_significant = sum(significant_10fdr[promoter]) == 1,
       r_all_30 = cor(original_pct_change, pct_change),
-      r_29_distal_pairs = cor(original_pct_change[!promoter], pct_change[!promoter]),
+      r_28_de_g_pairs = cor(original_pct_change[de_g], pct_change[de_g]),
       r_original_hits = cor(original_pct_change[hits], pct_change[hits])
     )
   },
@@ -201,14 +208,14 @@ correlations_vs_original <- validation[
   rbind(
     correlation_row(original_pct_change, pct_change, "all 30 selected pairs"),
     correlation_row(
-      original_pct_change[pair_class != "Self-promoter pair (not in FDR set)"],
-      pct_change[pair_class != "Self-promoter pair (not in FDR set)"],
-      "29 distal pairs (TP53 self-promoter pair excluded)"
+      original_pct_change[random_distal_element_gene %in% TRUE],
+      pct_change[random_distal_element_gene %in% TRUE],
+      "28 DE-G pairs"
     ),
     correlation_row(
       original_pct_change[pair_class == "Original hit (20% FDR)"],
       pct_change[pair_class == "Original hit (20% FDR)"],
-      "24 original hits"
+      "23 original hits"
     )
   ),
   by = run
@@ -222,16 +229,16 @@ knitr::kable(correlations_vs_original, digits = 3)
 ```{r replicate-concordance}
 replicate_wide <- dcast(
   validation[run %in% c("MOI1_1", "MOI1_5")],
-  pair + pair_class ~ run,
+  pair + pair_class + random_distal_element_gene ~ run,
   value.var = c("pct_change", "fold_change", "se_fold_change", "significant_10fdr")
 )
 
 replicate_correlations <- rbind(
   correlation_row(replicate_wide$pct_change_MOI1_1, replicate_wide$pct_change_MOI1_5, "all 30 selected pairs"),
   correlation_row(
-    replicate_wide[pair_class != "Self-promoter pair (not in FDR set)", pct_change_MOI1_1],
-    replicate_wide[pair_class != "Self-promoter pair (not in FDR set)", pct_change_MOI1_5],
-    "29 distal pairs (TP53 self-promoter pair excluded)"
+    replicate_wide[random_distal_element_gene %in% TRUE, pct_change_MOI1_1],
+    replicate_wide[random_distal_element_gene %in% TRUE, pct_change_MOI1_5],
+    "28 DE-G pairs"
   )
 )
 all_pairs_wide <- dcast(
@@ -282,6 +289,7 @@ pairs_table <- selected[
   ,
   .(
     pair, gene_symbol, gene_id, element_hg38, element_category, pair_class,
+    random_distal_element_gene,
     original_pct_change, original_ci95_lower, original_ci95_upper, original_p_value,
     original_adj_p_value, original_significant_20fdr
   )
@@ -291,7 +299,8 @@ for (run_name in names(run_prefixes)) {
   setnames(run_values, value_columns, paste0(run_prefixes[[run_name]], "_", value_columns))
   pairs_table <- merge(pairs_table, run_values, by = "pair", sort = FALSE)
 }
-class_order <- c("Original hit (20% FDR)", "Original non-hit", "Self-promoter pair (not in FDR set)")
+class_order <- c("Original hit (20% FDR)", "Original non-hit", "Element in target gene body (not a DE-G pair)",
+                 "Self-promoter pair (not in FDR set)")
 pairs_table <- pairs_table[order(match(pair_class, class_order), element_category, gene_symbol, element_hg38)]
 fwrite(pairs_table, file.path(source_data_dir, "validation_30_selected_pairs.tsv"), sep = "\t")
 

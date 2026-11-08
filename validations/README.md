@@ -61,7 +61,7 @@ marimo edit analyses/YYYY-MM-DD/my_notebook.py
 
 ## Validation screen and CTCF analyses (2026)
 
-Analyses of the WTC11 validation screen (30 selected element–gene pairs, two replicates each at low and high MOI) and of the CTCF ChIP-seq experiment at the FAM111A and CDC37 CTCF elements.
+Analyses of the WTC11 validation screen (30 selected element–gene pairs, of which 28 are DE-G pairs; two replicates each at low and high MOI) and of the CTCF ChIP-seq experiment at the FAM111A and CDC37 CTCF elements.
 
 R notebooks use `here()`, which resolves to this `validations/` folder (marked by `.here`). R package versions are in `renv.lock` (`renv::restore()`); rendering needs pandoc. Inputs (`data/`) and outputs (`results/`) are not tracked: the scripts in `scripts/bash/` download the public inputs from GEO [GSE303901](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE303901), GENCODE and UCSC. The small tables behind each figure are tracked in the `source_data/` folder of each analysis.
 

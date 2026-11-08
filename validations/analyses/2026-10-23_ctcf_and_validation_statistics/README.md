@@ -3,7 +3,7 @@
 ## Purpose
 
 - `01_ctcf_chip_statistics.Rmd`: tests of the CTCF ChIP-seq signal. Each targeting sgRNA (3 libraries) and both sgRNAs of a locus (6 libraries) are compared with the pooled non-targeting controls (6 libraries) by exact two-sided Wilcoxon rank-sum tests, with Holm and BH adjustment. Sensitivity analyses: each control line separately, a Welch t-test on log2 CPM, and the lines targeting the other locus. Also reports the per-guide CRISPRi effects behind the per-guide plots and the overlap of the sgRNAs with CTCF motifs.
-- `02_validation_30_pairs_table.Rmd`: original screen and validation estimates of the 30 selected element–gene pairs. It covers the pooled low- and high-MOI runs and the two low-MOI replicates analysed separately, with correlations with the screen and replicate concordance.
+- `02_validation_30_pairs_table.Rmd`: original screen and validation estimates of the 30 selected element–gene pairs: 28 DE-G pairs (23 original hits, 5 original non-hits), the TP53 self-promoter pair, and an element in an intron of its target gene (SLC2A3). It covers the pooled low- and high-MOI runs and the two low-MOI replicates analysed separately, with correlations with the screen and replicate concordance.
 
 ## Inputs
 
@@ -32,4 +32,4 @@ Both notebooks write their tables to `source_data/`:
 - `ctcf_chip_signal_per_library.tsv`: CTCF signal per library, with sgRNA, replicate, sequencing library and fragment count
 - `ctcf_chip_wilcoxon_tests.tsv`: guide-level and locus-level tests
 - `ctcf_elements_per_guide_crispri_effects.tsv`: per-guide effects at the two elements, with hg38 positions and distances to the CTCF motifs
-- `validation_30_selected_pairs.tsv`: the 30 selected pairs with original and validation effect sizes, 95% CIs, p-values and significance calls
+- `validation_30_selected_pairs.tsv`: the 30 selected pairs with original and validation effect sizes, 95% CIs, p-values and significance calls; `random_distal_element_gene` (Table S3 `Random_DistalElement_Gene`) marks the 28 DE-G pairs
